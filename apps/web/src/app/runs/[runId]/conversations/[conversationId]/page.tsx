@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import NavBar from '../../../../components/NavBar'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -19,6 +20,7 @@ interface Finding {
   severity: 'WARNING' | 'CRITICAL'
   description: string
   evidence: string | null
+  messageIndex?: number | null
 }
 
 interface Pattern {
@@ -27,6 +29,7 @@ interface Pattern {
   isEmergent: boolean
   explanation: string | null
   evidence: string | null
+  messageIndex?: number | null
 }
 
 interface Evaluation {
@@ -64,14 +67,27 @@ export default function ConversationDetailPage() {
   const [loading, setLoading] = useState(true)
   const [sharing, setSharing] = useState(false)
   const [isShared, setIsShared] = useState(false)
+  const [user, setUser] = useState<{ email: string; role: string } | null>(null)
+
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
 
   useEffect(() => {
     async function checkAuth() {
       const res = await fetch(`${API_URL}/auth/me`, { credentials: 'include' })
-      if (!res.ok) router.push('/login')
+      if (!res.ok) {
+        router.push('/login')
+        return
+      }
+      const userData = (await res.json()) as { email: string; role: string }
+      setUser(userData)
     }
     checkAuth()
   }, [router])
+
+  async function handleLogout() {
+    await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' })
+    router.push('/login')
+  }
 
   useEffect(() => {
     async function fetchConversation() {
@@ -109,6 +125,26 @@ export default function ConversationDetailPage() {
     }
   }
 
+  const scrollToMessage = useCallback((messageIndex: number) => {
+    const el = messageRefs.current.get(messageIndex)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // Add highlight flash animation
+      el.classList.remove('highlight-flash')
+      // Force reflow to restart animation
+      void el.offsetWidth
+      el.classList.add('highlight-flash')
+    }
+  }, [])
+
+  const setMessageRef = useCallback((index: number, el: HTMLDivElement | null) => {
+    if (el) {
+      messageRefs.current.set(index, el)
+    } else {
+      messageRefs.current.delete(index)
+    }
+  }, [])
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -127,27 +163,29 @@ export default function ConversationDetailPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
+      {/* Highlight flash animation */}
+      <style>{`
+        @keyframes highlightFlash {
+          0% { background-color: rgba(250, 204, 21, 0.5); }
+          100% { background-color: transparent; }
+        }
+        .highlight-flash {
+          animation: highlightFlash 1.5s ease-out forwards;
+          border-radius: 0.5rem;
+        }
+      `}</style>
+
       {/* Navigation */}
-      <nav className="border-b bg-white px-6 py-3">
-        <div className="flex items-center gap-6">
-          <h1 className="text-lg font-bold text-gray-900">Sistema de Evaluacion</h1>
-          <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">
-            Dashboard
-          </Link>
-          <Link href="/runs" className="text-sm text-blue-600 hover:underline">
-            Runs
-          </Link>
-          <Link href={`/runs/${runId}`} className="text-sm text-blue-600 hover:underline">
-            Detalle Run
-          </Link>
-        </div>
-      </nav>
+      <NavBar userEmail={user?.email} userRole={user?.role} onLogout={handleLogout} />
 
       {/* Header */}
       <div className="border-b bg-white px-6 py-3">
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3">
+              <Link href={`/runs/${runId}`} className="text-sm text-blue-600 hover:underline">
+                &larr; Detalle Run
+              </Link>
               <h2 className="text-lg font-semibold text-gray-900">
                 Sesion: {conversation.sessionId}
               </h2>
@@ -190,7 +228,13 @@ export default function ConversationDetailPage() {
               }}
             >
               {conversation.messages.map((msg) => (
-                <ChatBubble key={msg.id} message={msg} />
+                <div
+                  key={msg.id}
+                  ref={(el) => setMessageRef(msg.orderIndex, el)}
+                  data-message-index={msg.orderIndex}
+                >
+                  <ChatBubble message={msg} />
+                </div>
               ))}
             </div>
           </div>
@@ -208,7 +252,10 @@ export default function ConversationDetailPage() {
           )}
 
           {conversation.evaluation ? (
-            <EvaluationPanel evaluation={conversation.evaluation} />
+            <EvaluationPanel
+              evaluation={conversation.evaluation}
+              onScrollToMessage={scrollToMessage}
+            />
           ) : conversation.status !== 'NOT_EVALUABLE' ? (
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
               <p className="text-gray-500">
@@ -263,7 +310,13 @@ function ChatBubble({ message }: { message: Message }) {
   )
 }
 
-function EvaluationPanel({ evaluation }: { evaluation: Evaluation }) {
+function EvaluationPanel({
+  evaluation,
+  onScrollToMessage,
+}: {
+  evaluation: Evaluation
+  onScrollToMessage: (index: number) => void
+}) {
   const labelStyles: Record<string, string> = {
     APROBADA: 'bg-green-100 text-green-800 border-green-300',
     CON_HALLAZGOS: 'bg-amber-100 text-amber-800 border-amber-300',
@@ -308,15 +361,27 @@ function EvaluationPanel({ evaluation }: { evaluation: Evaluation }) {
             {evaluation.findings.map((finding) => (
               <div
                 key={finding.id}
-                className="rounded border-l-4 bg-gray-50 p-3"
+                className={`rounded border-l-4 bg-gray-50 p-3 ${
+                  finding.messageIndex != null ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''
+                }`}
                 style={{
                   borderLeftColor:
                     finding.severity === 'CRITICAL' ? '#ef4444' : '#f59e0b',
+                }}
+                onClick={() => {
+                  if (finding.messageIndex != null) {
+                    onScrollToMessage(finding.messageIndex)
+                  }
                 }}
               >
                 <div className="flex items-center gap-2">
                   <SeverityBadge severity={finding.severity} />
                   <span className="text-sm font-medium text-gray-800">{finding.type}</span>
+                  {finding.messageIndex != null && (
+                    <span className="ml-auto rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                      Msg #{finding.messageIndex}
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 text-sm text-gray-600">{finding.description}</p>
                 {finding.evidence && (
@@ -344,11 +409,26 @@ function EvaluationPanel({ evaluation }: { evaluation: Evaluation }) {
           <h3 className="mb-3 text-base font-semibold text-gray-900">Patrones</h3>
           <div className="space-y-2">
             {evaluation.patterns.map((pattern) => (
-              <div key={pattern.id} className="flex items-start gap-2 rounded bg-gray-50 p-3">
+              <div
+                key={pattern.id}
+                className={`flex items-start gap-2 rounded bg-gray-50 p-3 ${
+                  pattern.messageIndex != null ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''
+                }`}
+                onClick={() => {
+                  if (pattern.messageIndex != null) {
+                    onScrollToMessage(pattern.messageIndex)
+                  }
+                }}
+              >
                 <span className="text-sm font-medium text-gray-800">{pattern.name}</span>
                 {pattern.isEmergent && (
                   <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
                     Emergente
+                  </span>
+                )}
+                {pattern.messageIndex != null && (
+                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                    Msg #{pattern.messageIndex}
                   </span>
                 )}
                 {pattern.explanation && (

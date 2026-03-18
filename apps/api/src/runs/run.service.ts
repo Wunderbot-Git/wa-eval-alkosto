@@ -271,6 +271,111 @@ export class RunService {
     }
   }
 
+  async getRunComparison(runId: string) {
+    const run = await this.prisma.run.findUnique({
+      where: { id: runId },
+      select: {
+        id: true,
+        aggregateScore: true,
+        createdAt: true,
+        createdBy: true,
+      },
+    })
+    if (!run) {
+      throw new NotFoundException('Run not found')
+    }
+
+    // Get label distribution for the current run
+    const currentConversations = await this.prisma.conversation.findMany({
+      where: { runId },
+      select: {
+        status: true,
+        evaluation: { select: { label: true } },
+      },
+    })
+
+    const currentDist = { APROBADA: 0, CON_HALLAZGOS: 0, FALLIDA: 0, NOT_EVALUABLE: 0 }
+    for (const conv of currentConversations) {
+      if (conv.status === 'NOT_EVALUABLE') {
+        currentDist.NOT_EVALUABLE++
+      } else if (conv.evaluation?.label) {
+        const label = conv.evaluation.label as string
+        if (label in currentDist) {
+          currentDist[label as keyof typeof currentDist]++
+        }
+      }
+    }
+
+    const current = {
+      score: run.aggregateScore,
+      aprobadas: currentDist.APROBADA,
+      conHallazgos: currentDist.CON_HALLAZGOS,
+      fallidas: currentDist.FALLIDA,
+      total: currentConversations.length,
+    }
+
+    // Find the previous completed run (by createdAt, before the given run)
+    const previousRun = await this.prisma.run.findFirst({
+      where: {
+        createdBy: run.createdBy,
+        createdAt: { lt: run.createdAt },
+        status: { in: ['COMPLETED', 'COMPLETED_WITH_ERRORS'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        aggregateScore: true,
+      },
+    })
+
+    if (!previousRun) {
+      return { current, previous: null, deltas: null }
+    }
+
+    // Get label distribution for the previous run
+    const prevConversations = await this.prisma.conversation.findMany({
+      where: { runId: previousRun.id },
+      select: {
+        status: true,
+        evaluation: { select: { label: true } },
+      },
+    })
+
+    const prevDist = { APROBADA: 0, CON_HALLAZGOS: 0, FALLIDA: 0, NOT_EVALUABLE: 0 }
+    for (const conv of prevConversations) {
+      if (conv.status === 'NOT_EVALUABLE') {
+        prevDist.NOT_EVALUABLE++
+      } else if (conv.evaluation?.label) {
+        const label = conv.evaluation.label as string
+        if (label in prevDist) {
+          prevDist[label as keyof typeof prevDist]++
+        }
+      }
+    }
+
+    const previous = {
+      score: previousRun.aggregateScore,
+      aprobadas: prevDist.APROBADA,
+      conHallazgos: prevDist.CON_HALLAZGOS,
+      fallidas: prevDist.FALLIDA,
+      total: prevConversations.length,
+    }
+
+    const scoresDelta =
+      current.score !== null && previous.score !== null
+        ? current.score - previous.score
+        : null
+
+    const deltas = {
+      score: scoresDelta,
+      aprobadas: current.aprobadas - previous.aprobadas,
+      conHallazgos: current.conHallazgos - previous.conHallazgos,
+      fallidas: current.fallidas - previous.fallidas,
+    }
+
+    return { current, previous, deltas }
+  }
+
   async getRunConversations(
     runId: string,
     page = 1,

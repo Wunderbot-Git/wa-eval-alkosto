@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import NavBar from '../components/NavBar'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -40,6 +41,7 @@ export default function RunsPage() {
   const [runs, setRuns] = useState<RunsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
+  const [user, setUser] = useState<{ email: string; role: string } | null>(null)
 
   useEffect(() => {
     async function checkAuth() {
@@ -49,6 +51,8 @@ export default function RunsPage() {
           router.push('/login')
           return
         }
+        const userData = (await res.json()) as { email: string; role: string }
+        setUser(userData)
       } catch {
         router.push('/login')
         return
@@ -56,6 +60,11 @@ export default function RunsPage() {
     }
     checkAuth()
   }, [router])
+
+  async function handleLogout() {
+    await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' })
+    router.push('/login')
+  }
 
   useEffect(() => {
     async function fetchRuns() {
@@ -78,17 +87,7 @@ export default function RunsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="border-b bg-white px-6 py-3">
-        <div className="flex items-center gap-6">
-          <h1 className="text-lg font-bold text-gray-900">Sistema de Evaluacion</h1>
-          <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">
-            Dashboard
-          </Link>
-          <Link href="/runs" className="text-sm font-medium text-blue-600 hover:underline">
-            Runs
-          </Link>
-        </div>
-      </nav>
+      <NavBar userEmail={user?.email} userRole={user?.role} onLogout={handleLogout} />
 
       <main className="mx-auto max-w-6xl p-6">
         <h2 className="mb-6 text-2xl font-bold text-gray-900">Historial de Runs</h2>

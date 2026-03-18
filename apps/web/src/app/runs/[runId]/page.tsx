@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import NavBar from '../../components/NavBar'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -67,14 +68,25 @@ export default function RunDetailPage() {
   const [reevaluating, setReevaluating] = useState(false)
   const [showReevalModal, setShowReevalModal] = useState(false)
   const [reevalFilters, setReevalFilters] = useState({ status: '', label: '', findingType: '', pattern: '' })
+  const [user, setUser] = useState<{ email: string; role: string } | null>(null)
 
   useEffect(() => {
     async function checkAuth() {
       const res = await fetch(`${API_URL}/auth/me`, { credentials: 'include' })
-      if (!res.ok) router.push('/login')
+      if (!res.ok) {
+        router.push('/login')
+        return
+      }
+      const userData = (await res.json()) as { email: string; role: string }
+      setUser(userData)
     }
     checkAuth()
   }, [router])
+
+  async function handleLogout() {
+    await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' })
+    router.push('/login')
+  }
 
   useEffect(() => {
     async function fetchSummary() {
@@ -253,17 +265,7 @@ export default function RunDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="border-b bg-white px-6 py-3">
-        <div className="flex items-center gap-6">
-          <h1 className="text-lg font-bold text-gray-900">Sistema de Evaluacion</h1>
-          <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">
-            Dashboard
-          </Link>
-          <Link href="/runs" className="text-sm text-blue-600 hover:underline">
-            Runs
-          </Link>
-        </div>
-      </nav>
+      <NavBar userEmail={user?.email} userRole={user?.role} onLogout={handleLogout} />
 
       <main className="mx-auto max-w-6xl p-6">
         {/* Run Header */}

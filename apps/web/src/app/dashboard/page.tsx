@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import NavBar from '../components/NavBar'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -32,10 +33,30 @@ interface User {
   role: string
 }
 
+interface ComparisonRunSummary {
+  score: number | null
+  aprobadas: number
+  conHallazgos: number
+  fallidas: number
+  total: number
+}
+
+interface ComparisonData {
+  current: ComparisonRunSummary
+  previous: ComparisonRunSummary | null
+  deltas: {
+    score: number | null
+    aprobadas: number
+    conHallazgos: number
+    fallidas: number
+  } | null
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [latestRun, setLatestRun] = useState<RunData | null>(null)
+  const [comparison, setComparison] = useState<ComparisonData | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchLatestRun = useCallback(async () => {
@@ -44,6 +65,19 @@ export default function DashboardPage() {
       if (res.ok) {
         const data = (await res.json()) as RunData
         setLatestRun(data)
+        return data
+      }
+    } catch {
+      // ignore
+    }
+    return null
+  }, [])
+
+  const fetchComparison = useCallback(async (runId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/runs/${runId}/comparison`, { credentials: 'include' })
+      if (res.ok) {
+        setComparison((await res.json()) as ComparisonData)
       }
     } catch {
       // ignore
@@ -60,7 +94,10 @@ export default function DashboardPage() {
         }
         const userData = (await res.json()) as User
         setUser(userData)
-        await fetchLatestRun()
+        const run = await fetchLatestRun()
+        if (run) {
+          await fetchComparison(run.id)
+        }
       } catch {
         router.push('/login')
       } finally {
@@ -68,7 +105,7 @@ export default function DashboardPage() {
       }
     }
     init()
-  }, [router, fetchLatestRun])
+  }, [router, fetchLatestRun, fetchComparison])
 
   // Poll for progress if run is PROCESSING
   useEffect(() => {
@@ -85,7 +122,10 @@ export default function DashboardPage() {
             prev ? { ...prev, ...statusData } : prev,
           )
           if (statusData.status !== 'PROCESSING') {
-            await fetchLatestRun()
+            const run = await fetchLatestRun()
+            if (run) {
+              await fetchComparison(run.id)
+            }
           }
         }
       } catch {
@@ -94,7 +134,7 @@ export default function DashboardPage() {
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [latestRun?.id, latestRun?.status, fetchLatestRun])
+  }, [latestRun?.id, latestRun?.status, fetchLatestRun, fetchComparison])
 
   async function handleLogout() {
     await fetch(`${API_URL}/auth/logout`, {
@@ -113,6 +153,8 @@ export default function DashboardPage() {
   }
 
   if (!user) return null
+
+  const isAdmin = user.role === 'ADMIN' || user.role === 'INTERNAL_ALKOSTO'
 
   const total = latestRun
     ? (latestRun.labelDistribution.APROBADA +
@@ -133,26 +175,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="border-b bg-white px-6 py-3">
-        <div className="flex items-center gap-6">
-          <h1 className="text-lg font-bold text-gray-900">Sistema de Evaluacion</h1>
-          <Link href="/dashboard" className="text-sm font-medium text-blue-600 hover:underline">
-            Dashboard
-          </Link>
-          <Link href="/runs" className="text-sm text-blue-600 hover:underline">
-            Runs
-          </Link>
-          <div className="ml-auto flex items-center gap-4">
-            <span className="text-sm text-gray-500">{user.email}</span>
-            <button
-              onClick={handleLogout}
-              className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
-            >
-              Salir
-            </button>
-          </div>
-        </div>
-      </nav>
+      <NavBar userEmail={user.email} userRole={user.role} onLogout={handleLogout} />
 
       <main className="mx-auto max-w-5xl p-6">
         <h2 className="mb-6 text-2xl font-bold text-gray-900">Dashboard</h2>
@@ -280,8 +303,42 @@ export default function DashboardPage() {
               )}
             </div>
 
+            {/* Comparison vs. Previous Run */}
+            <div className="rounded-lg bg-white p-6 shadow">
+              <h3 className="mb-4 text-lg font-semibold text-gray-900">Comparacion vs. Run Anterior</h3>
+              {!comparison || !comparison.previous ? (
+                <p className="text-sm text-gray-500">No hay run anterior para comparar.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <DeltaCard
+                    label="Score"
+                    delta={comparison.deltas!.score}
+                    format="percent"
+                  />
+                  <DeltaCard
+                    label="Aprobadas"
+                    delta={comparison.deltas!.aprobadas}
+                    format="count"
+                    positive="up"
+                  />
+                  <DeltaCard
+                    label="Con Hallazgos"
+                    delta={comparison.deltas!.conHallazgos}
+                    format="count"
+                    positive="down"
+                  />
+                  <DeltaCard
+                    label="Fallidas"
+                    delta={comparison.deltas!.fallidas}
+                    format="count"
+                    positive="down"
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Quick Links */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Link
                 href={`/runs/${latestRun.id}`}
                 className="rounded-lg bg-white p-4 shadow transition hover:shadow-md"
@@ -296,17 +353,77 @@ export default function DashboardPage() {
                 <h4 className="font-medium text-gray-900">Historial de Runs</h4>
                 <p className="text-sm text-gray-500">Ver todos los runs anteriores</p>
               </Link>
-              <Link
-                href="/"
-                className="rounded-lg bg-white p-4 shadow transition hover:shadow-md"
-              >
-                <h4 className="font-medium text-gray-900">Inicio</h4>
-                <p className="text-sm text-gray-500">Volver a la pagina principal</p>
-              </Link>
+              {isAdmin && (
+                <>
+                  <Link
+                    href="/catalogs"
+                    className="rounded-lg bg-white p-4 shadow transition hover:shadow-md"
+                  >
+                    <h4 className="font-medium text-gray-900">Subir Catalogo</h4>
+                    <p className="text-sm text-gray-500">Gestionar catalogos de productos</p>
+                  </Link>
+                  <Link
+                    href="/upload"
+                    className="rounded-lg bg-white p-4 shadow transition hover:shadow-md"
+                  >
+                    <h4 className="font-medium text-gray-900">Subir Conversaciones</h4>
+                    <p className="text-sm text-gray-500">Cargar nuevas conversaciones</p>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}
       </main>
+    </div>
+  )
+}
+
+function DeltaCard({
+  label,
+  delta,
+  format,
+  positive = 'up',
+}: {
+  label: string
+  delta: number | null
+  format: 'percent' | 'count'
+  positive?: 'up' | 'down'
+}) {
+  if (delta === null) {
+    return (
+      <div className="rounded-lg border p-4">
+        <span className="text-sm text-gray-600">{label}</span>
+        <p className="mt-2 text-lg font-bold text-gray-400">-</p>
+      </div>
+    )
+  }
+
+  const isPositive = positive === 'up' ? delta > 0 : delta < 0
+  const isNegative = positive === 'up' ? delta < 0 : delta > 0
+  const arrow = delta > 0 ? '\u2191' : delta < 0 ? '\u2193' : ''
+  const colorClass = isPositive
+    ? 'text-green-700'
+    : isNegative
+      ? 'text-red-700'
+      : 'text-gray-600'
+  const bgClass = isPositive
+    ? 'bg-green-50 border-green-200'
+    : isNegative
+      ? 'bg-red-50 border-red-200'
+      : 'border-gray-200'
+
+  const displayValue =
+    format === 'percent'
+      ? `${arrow} ${(Math.abs(delta) * 100).toFixed(1)}%`
+      : `${arrow} ${Math.abs(delta)}`
+
+  return (
+    <div className={`rounded-lg border p-4 ${bgClass}`}>
+      <span className="text-sm text-gray-600">{label}</span>
+      <p className={`mt-2 text-lg font-bold ${colorClass}`}>
+        {delta === 0 ? '=' : displayValue}
+      </p>
     </div>
   )
 }

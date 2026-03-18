@@ -298,6 +298,109 @@ describe('RunService', () => {
     })
   })
 
+  describe('getRunComparison', () => {
+    it('should return comparison with previous run', async () => {
+      prisma.run.findUnique.mockResolvedValue({
+        id: 'run-2',
+        aggregateScore: 0.85,
+        createdAt: new Date('2026-03-18'),
+        createdBy: 'user-1',
+      })
+
+      // Current run conversations
+      prisma.conversation.findMany.mockResolvedValueOnce([
+        { status: 'EVALUATED', evaluation: { label: 'APROBADA' } },
+        { status: 'EVALUATED', evaluation: { label: 'APROBADA' } },
+        { status: 'EVALUATED', evaluation: { label: 'CON_HALLAZGOS' } },
+        { status: 'EVALUATED', evaluation: { label: 'FALLIDA' } },
+      ])
+
+      // Previous run
+      prisma.run.findFirst.mockResolvedValue({
+        id: 'run-1',
+        aggregateScore: 0.70,
+      })
+
+      // Previous run conversations
+      prisma.conversation.findMany.mockResolvedValueOnce([
+        { status: 'EVALUATED', evaluation: { label: 'APROBADA' } },
+        { status: 'EVALUATED', evaluation: { label: 'CON_HALLAZGOS' } },
+        { status: 'EVALUATED', evaluation: { label: 'FALLIDA' } },
+        { status: 'EVALUATED', evaluation: { label: 'FALLIDA' } },
+      ])
+
+      const result = await service.getRunComparison('run-2')
+
+      expect(result.current.score).toBe(0.85)
+      expect(result.current.aprobadas).toBe(2)
+      expect(result.current.conHallazgos).toBe(1)
+      expect(result.current.fallidas).toBe(1)
+      expect(result.current.total).toBe(4)
+
+      expect(result.previous).not.toBeNull()
+      expect(result.previous!.score).toBe(0.70)
+      expect(result.previous!.aprobadas).toBe(1)
+      expect(result.previous!.fallidas).toBe(2)
+
+      expect(result.deltas).not.toBeNull()
+      expect(result.deltas!.score).toBeCloseTo(0.15)
+      expect(result.deltas!.aprobadas).toBe(1)
+      expect(result.deltas!.conHallazgos).toBe(0)
+      expect(result.deltas!.fallidas).toBe(-1)
+    })
+
+    it('should return null previous and deltas when no previous run exists', async () => {
+      prisma.run.findUnique.mockResolvedValue({
+        id: 'run-1',
+        aggregateScore: 0.85,
+        createdAt: new Date('2026-03-18'),
+        createdBy: 'user-1',
+      })
+
+      prisma.conversation.findMany.mockResolvedValueOnce([
+        { status: 'EVALUATED', evaluation: { label: 'APROBADA' } },
+      ])
+
+      prisma.run.findFirst.mockResolvedValue(null)
+
+      const result = await service.getRunComparison('run-1')
+
+      expect(result.current.aprobadas).toBe(1)
+      expect(result.previous).toBeNull()
+      expect(result.deltas).toBeNull()
+    })
+
+    it('should handle null scores gracefully', async () => {
+      prisma.run.findUnique.mockResolvedValue({
+        id: 'run-2',
+        aggregateScore: null,
+        createdAt: new Date('2026-03-18'),
+        createdBy: 'user-1',
+      })
+
+      prisma.conversation.findMany.mockResolvedValueOnce([])
+
+      prisma.run.findFirst.mockResolvedValue({
+        id: 'run-1',
+        aggregateScore: 0.70,
+      })
+
+      prisma.conversation.findMany.mockResolvedValueOnce([
+        { status: 'EVALUATED', evaluation: { label: 'APROBADA' } },
+      ])
+
+      const result = await service.getRunComparison('run-2')
+
+      expect(result.deltas!.score).toBeNull()
+      expect(result.deltas!.aprobadas).toBe(-1)
+    })
+
+    it('should throw NotFoundException for missing run', async () => {
+      prisma.run.findUnique.mockResolvedValue(null)
+      await expect(service.getRunComparison('nonexistent')).rejects.toThrow(NotFoundException)
+    })
+  })
+
   describe('getRunConversations', () => {
     it('should return paginated conversations for a run', async () => {
       prisma.run.findUnique.mockResolvedValue({ id: 'run-1' })

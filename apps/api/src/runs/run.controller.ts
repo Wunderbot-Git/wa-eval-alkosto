@@ -87,6 +87,17 @@ export class RunController {
     return this.runService.getRunSummary(id)
   }
 
+  @Get(':id/comparison')
+  @UseGuards(AuthGuard)
+  async getRunComparison(@Param('id') id: string, @Req() req: Request) {
+    const user = (req as any).user
+    if (user.role === 'YALO_READER') {
+      const shared = await this.sharingService.isShared(id)
+      if (!shared) throw new ForbiddenException('Run not shared with you')
+    }
+    return this.runService.getRunComparison(id)
+  }
+
   @Get(':id/conversations')
   @UseGuards(AuthGuard)
   async getRunConversations(
