@@ -1,0 +1,283 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  INTERNAL_ALKOSTO
+  YALO_READER
+}
+
+enum RunStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  CANCELLED
+}
+
+enum ConversationStatus {
+  PENDING
+  EVALUATING
+  EVALUATED
+  NOT_EVALUABLE
+  FAILED
+}
+
+enum MessageRole {
+  CUSTOMER
+  AGENT
+}
+
+enum EvaluationModule {
+  INTEGRITY
+  QUALITY
+  PATTERNS
+  CONSOLIDATOR
+}
+
+enum EvaluationLabel {
+  APROBADA
+  CON_HALLAZGOS
+  FALLIDA
+}
+
+enum FindingSeverity {
+  WARNING
+  CRITICAL
+}
+
+enum ShareType {
+  RUN
+  CONVERSATION
+}
+
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(INTERNAL_ALKOSTO)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  runs         Run[]
+  sessions     Session[]
+  inviteTokens InviteToken[]
+  catalogs     Catalog[]
+  shareRecords ShareRecord[]
+  exportJobs   ExportJob[]
+}
+
+model InviteToken {
+  id        String    @id @default(uuid())
+  email     String
+  role      Role
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdBy String
+  createdAt DateTime  @default(now())
+
+  creator User @relation(fields: [createdBy], references: [id])
+
+  @@index([token])
+  @@index([createdBy])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Run {
+  id                 String    @id @default(uuid())
+  name               String
+  status             RunStatus @default(PENDING)
+  totalConversations Int       @default(0)
+  evaluatedCount     Int       @default(0)
+  notEvaluableCount  Int       @default(0)
+  failedCount        Int       @default(0)
+  aggregateScore     Float?
+  expiresAt          DateTime?
+  createdBy          String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  creator       User           @relation(fields: [createdBy], references: [id])
+  conversations Conversation[]
+  shareRecords  ShareRecord[]
+  exportJobs    ExportJob[]
+
+  @@index([status])
+  @@index([createdBy])
+}
+
+model Catalog {
+  id           String   @id @default(uuid())
+  filename     String
+  catalogDate  DateTime @db.Date
+  productCount Int
+  uploadedBy   String
+  createdAt    DateTime @default(now())
+
+  uploader User             @relation(fields: [uploadedBy], references: [id])
+  products CatalogProduct[]
+
+  @@index([catalogDate])
+  @@index([uploadedBy])
+}
+
+model CatalogProduct {
+  id                 String  @id @default(uuid())
+  catalogId          String
+  externalId         String
+  title              String
+  listPrice          Float?
+  salePrice          Float?
+  paymentMethodPrice String?
+  availability       Int?
+  category           String?
+  brand              String?
+  rawData            Json
+
+  catalog Catalog @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+
+  @@index([catalogId])
+  @@index([externalId])
+}
+
+model Conversation {
+  id                 String             @id @default(uuid())
+  runId              String
+  sessionId          String
+  conversationDate   DateTime
+  messageCount       Int
+  status             ConversationStatus @default(PENDING)
+  notEvaluableReason String?
+  createdAt          DateTime           @default(now())
+
+  run          Run           @relation(fields: [runId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  evaluation   Evaluation?
+  snapshot     Snapshot?
+  shareRecords ShareRecord[]
+
+  @@index([runId])
+  @@index([sessionId])
+}
+
+model Message {
+  id             String      @id @default(uuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  orderIndex     Int
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+model Evaluation {
+  id                       String           @id @default(uuid())
+  conversationId           String           @unique
+  module                   EvaluationModule
+  score                    Float?
+  label                    EvaluationLabel?
+  integrityFindings        Json?
+  qualitySubScores         Json?
+  patternClassifications   Json?
+  consolidatorExplanation  String?
+  promptVersions           Json?
+  createdAt                DateTime         @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  findings     Finding[]
+  patterns     Pattern[]
+}
+
+model Finding {
+  id           String          @id @default(uuid())
+  evaluationId String
+  type         String
+  severity     FindingSeverity
+  description  String
+  evidence     String?
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@index([evaluationId])
+}
+
+model Pattern {
+  id           String  @id @default(uuid())
+  evaluationId String
+  name         String
+  isEmergent   Boolean
+  explanation  String?
+  evidence     String?
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@index([evaluationId])
+}
+
+model Snapshot {
+  id             String   @id @default(uuid())
+  conversationId String   @unique
+  data           Json
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model ShareRecord {
+  id             String   @id @default(uuid())
+  runId          String?
+  conversationId String?
+  sharedBy       String
+  sharedAt       DateTime @default(now())
+
+  run          Run?          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sharer       User          @relation(fields: [sharedBy], references: [id])
+
+  @@index([runId])
+  @@index([conversationId])
+  @@index([sharedBy])
+}
+
+model ExportJob {
+  id          String       @id @default(uuid())
+  runId       String
+  status      ExportStatus @default(PENDING)
+  filePath    String?
+  createdBy   String
+  createdAt   DateTime     @default(now())
+  completedAt DateTime?
+
+  run     Run  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  creator User @relation(fields: [createdBy], references: [id])
+
+  @@index([runId])
+  @@index([createdBy])
+}

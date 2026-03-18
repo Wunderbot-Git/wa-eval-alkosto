@@ -1,0 +1,5 @@
+export { EvaluationModule } from './evaluation.module'
+export { IntegrityEvaluationService } from './integrity-evaluation.service'
+export { QualityEvaluationService } from './quality-evaluation.service'
+export { PatternEvaluationService } from './pattern-evaluation.service'
+export { ConsolidatorService } from './consolidator.service'

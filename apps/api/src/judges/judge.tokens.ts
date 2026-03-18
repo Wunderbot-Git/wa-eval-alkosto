@@ -1,0 +1,4 @@
+export const INTEGRITY_JUDGE = Symbol('INTEGRITY_JUDGE')
+export const QUALITY_JUDGE = Symbol('QUALITY_JUDGE')
+export const PATTERN_JUDGE = Symbol('PATTERN_JUDGE')
+export const CONSOLIDATOR_JUDGE = Symbol('CONSOLIDATOR_JUDGE')

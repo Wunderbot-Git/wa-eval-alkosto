@@ -1,0 +1,22 @@
+{
+  "name": "wa-eval-system-alkosto",
+  "private": true,
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev": "pnpm --parallel -r run dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "test:e2e": "pnpm --filter web run test:e2e",
+    "lint": "pnpm -r run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@nestjs/core", "esbuild", "sharp", "@prisma/client", "prisma"]
+  }
+}

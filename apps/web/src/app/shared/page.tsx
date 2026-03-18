@@ -1,0 +1,222 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+interface LabelDistribution {
+  APROBADA: number
+  CON_HALLAZGOS: number
+  FALLIDA: number
+  NOT_EVALUABLE: number
+}
+
+interface SharedRunItem {
+  id: string
+  name: string
+  status: string
+  totalConversations: number
+  evaluatedCount: number
+  notEvaluableCount: number
+  failedCount: number
+  aggregateScore: number | null
+  createdAt: string
+  labelDistribution: LabelDistribution
+}
+
+interface SharedRunsResponse {
+  data: SharedRunItem[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export default function SharedPage() {
+  const router = useRouter()
+  const [runs, setRuns] = useState<SharedRunsResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch(`${API_URL}/auth/me`, { credentials: 'include' })
+        if (!res.ok) {
+          router.push('/login')
+          return
+        }
+      } catch {
+        router.push('/login')
+        return
+      }
+    }
+    checkAuth()
+  }, [router])
+
+  useEffect(() => {
+    async function fetchSharedRuns() {
+      setLoading(true)
+      try {
+        const res = await fetch(`${API_URL}/sharing/runs?page=${page}&limit=20`, {
+          credentials: 'include',
+        })
+        if (res.ok) {
+          setRuns((await res.json()) as SharedRunsResponse)
+        }
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchSharedRuns()
+  }, [page])
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="border-b bg-white px-6 py-3">
+        <div className="flex items-center gap-6">
+          <h1 className="text-lg font-bold text-gray-900">Sistema de Evaluacion</h1>
+          <Link href="/shared" className="text-sm font-medium text-blue-600 hover:underline">
+            Compartidos
+          </Link>
+        </div>
+      </nav>
+
+      <main className="mx-auto max-w-6xl p-6">
+        <h2 className="mb-6 text-2xl font-bold text-gray-900">Runs Compartidos</h2>
+
+        {loading ? (
+          <p className="text-gray-500">Cargando...</p>
+        ) : !runs || runs.data.length === 0 ? (
+          <div className="rounded-lg bg-white p-8 text-center shadow">
+            <p className="text-gray-500">No hay runs compartidos contigo.</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-hidden rounded-lg bg-white shadow">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b bg-gray-50 text-xs uppercase text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3">Nombre</th>
+                    <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3">Fecha</th>
+                    <th className="px-4 py-3 text-center">Total</th>
+                    <th className="px-4 py-3 text-center">Score</th>
+                    <th className="px-4 py-3">Distribucion</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {runs.data.map((run) => (
+                    <tr
+                      key={run.id}
+                      onClick={() => router.push(`/runs/${run.id}`)}
+                      className="cursor-pointer hover:bg-gray-50"
+                    >
+                      <td className="px-4 py-3 font-medium text-gray-900">{run.name}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={run.status} />
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">
+                        {new Date(run.createdAt).toLocaleDateString('es-CO')}
+                      </td>
+                      <td className="px-4 py-3 text-center">{run.totalConversations}</td>
+                      <td className="px-4 py-3 text-center">
+                        {run.aggregateScore !== null
+                          ? `${(run.aggregateScore * 100).toFixed(1)}%`
+                          : '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <LabelBar distribution={run.labelDistribution} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {runs.totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="rounded border px-3 py-1 text-sm disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                <span className="text-sm text-gray-600">
+                  Pagina {runs.page} de {runs.totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(runs.totalPages, p + 1))}
+                  disabled={page >= runs.totalPages}
+                  className="rounded border px-3 py-1 text-sm disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </main>
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    PENDING: 'bg-gray-100 text-gray-700',
+    PROCESSING: 'bg-blue-100 text-blue-700',
+    COMPLETED: 'bg-green-100 text-green-700',
+    COMPLETED_WITH_ERRORS: 'bg-amber-100 text-amber-700',
+    CANCELLED: 'bg-red-100 text-red-700',
+  }
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-700'}`}
+    >
+      {status}
+    </span>
+  )
+}
+
+function LabelBar({ distribution }: { distribution: LabelDistribution }) {
+  const total =
+    distribution.APROBADA +
+    distribution.CON_HALLAZGOS +
+    distribution.FALLIDA +
+    distribution.NOT_EVALUABLE
+  if (total === 0) return <span className="text-xs text-gray-400">-</span>
+
+  return (
+    <div className="flex h-2 w-24 overflow-hidden rounded-full">
+      {distribution.APROBADA > 0 && (
+        <div
+          className="bg-green-500"
+          style={{ width: `${(distribution.APROBADA / total) * 100}%` }}
+        />
+      )}
+      {distribution.CON_HALLAZGOS > 0 && (
+        <div
+          className="bg-amber-500"
+          style={{ width: `${(distribution.CON_HALLAZGOS / total) * 100}%` }}
+        />
+      )}
+      {distribution.FALLIDA > 0 && (
+        <div
+          className="bg-red-500"
+          style={{ width: `${(distribution.FALLIDA / total) * 100}%` }}
+        />
+      )}
+      {distribution.NOT_EVALUABLE > 0 && (
+        <div
+          className="bg-gray-400"
+          style={{ width: `${(distribution.NOT_EVALUABLE / total) * 100}%` }}
+        />
+      )}
+    </div>
+  )
+}
