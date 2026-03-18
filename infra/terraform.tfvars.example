@@ -1,0 +1,5 @@
+project_id     = "wa-eval-alkosto"
+region         = "us-central1"
+db_password    = "CHANGE_ME_strong_password_here"
+session_secret = "CHANGE_ME_random_64_char_string"
+gemini_api_key = ""  # Leave empty for fake judges, or set your Gemini API key

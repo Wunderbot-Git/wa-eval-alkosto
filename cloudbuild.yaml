@@ -1,0 +1,75 @@
+steps:
+  # Build API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:latest'
+      - '-f'
+      - 'apps/api/Dockerfile'
+      - '.'
+
+  # Build Web image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:latest'
+      - '-f'
+      - 'apps/web/Dockerfile'
+      - '.'
+
+  # Push API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api']
+
+  # Push Web image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web']
+
+  # Run Prisma migrations
+  - name: '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:${SHORT_SHA}'
+    entrypoint: 'npx'
+    args: ['prisma', 'migrate', 'deploy']
+    secretEnv: ['DATABASE_URL']
+
+  # Deploy API to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'services'
+      - 'update'
+      - 'eval-api'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:${SHORT_SHA}'
+      - '--region'
+      - '${_REGION}'
+
+  # Deploy Web to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'services'
+      - 'update'
+      - 'eval-web'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:${SHORT_SHA}'
+      - '--region'
+      - '${_REGION}'
+
+substitutions:
+  _REGION: us-central1
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/${PROJECT_ID}/secrets/database-url/versions/latest
+      env: DATABASE_URL
+
+options:
+  logging: CLOUD_LOGGING_ONLY
