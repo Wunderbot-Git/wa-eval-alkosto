@@ -1,5 +1,0 @@
-project_id     = "wa-eval-alkosto"
-region         = "us-central1"
-db_password    = "zgGox0qEASNmofFfIBSCcMNx96bu69I"
-session_secret = "15641227dd310359687f5c1bdccd8a89cd57acad41c2e4438b54094a85c34d83"
-gemini_api_key = ""
