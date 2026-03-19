@@ -5,6 +5,7 @@ locals {
 
 # API Cloud Run service
 resource "google_cloud_run_v2_service" "api" {
+  count    = var.deploy_services ? 1 : 0
   name     = "eval-api"
   location = var.region
 
@@ -66,16 +67,6 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
-        name = "GEMINI_API_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.gemini_api_key.secret_id
-            version = "latest"
-          }
-        }
-      }
-
-      env {
         name  = "API_PORT"
         value = "3001"
       }
@@ -89,8 +80,6 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "WORKER_CONCURRENCY"
         value = "5"
       }
-
-      # CORS_ORIGIN and APP_URL set after web service is created
     }
   }
 
@@ -102,6 +91,7 @@ resource "google_cloud_run_v2_service" "api" {
 
 # Web Cloud Run service
 resource "google_cloud_run_v2_service" "web" {
+  count    = var.deploy_services ? 1 : 0
   name     = "eval-web"
   location = var.region
 
@@ -129,7 +119,7 @@ resource "google_cloud_run_v2_service" "web" {
 
       env {
         name  = "NEXT_PUBLIC_API_URL"
-        value = google_cloud_run_v2_service.api.uri
+        value = var.deploy_services ? google_cloud_run_v2_service.api[0].uri : ""
       }
     }
   }
@@ -142,14 +132,16 @@ resource "google_cloud_run_v2_service" "web" {
 
 # Allow unauthenticated access (public web app)
 resource "google_cloud_run_v2_service_iam_member" "api_public" {
-  name     = google_cloud_run_v2_service.api.name
+  count    = var.deploy_services ? 1 : 0
+  name     = google_cloud_run_v2_service.api[0].name
   location = var.region
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
 
 resource "google_cloud_run_v2_service_iam_member" "web_public" {
-  name     = google_cloud_run_v2_service.web.name
+  count    = var.deploy_services ? 1 : 0
+  name     = google_cloud_run_v2_service.web[0].name
   location = var.region
   role     = "roles/run.invoker"
   member   = "allUsers"

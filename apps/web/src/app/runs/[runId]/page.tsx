@@ -415,8 +415,8 @@ export default function RunDetailPage() {
         <div className="mb-4 flex flex-wrap gap-3">
           <select
             value={statusFilter}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-              setStatusFilter(e.target.value)
+            onChange={(e: any) => {
+              setStatusFilter((e.target as HTMLSelectElement).value)
               setPage(1)
             }}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm"
@@ -430,8 +430,8 @@ export default function RunDetailPage() {
           </select>
           <select
             value={labelFilter}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-              setLabelFilter(e.target.value)
+            onChange={(e: any) => {
+              setLabelFilter((e.target as HTMLSelectElement).value)
               setPage(1)
             }}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm"
@@ -538,7 +538,7 @@ export default function RunDetailPage() {
                   <label className="block text-xs font-medium text-gray-700">Estado</label>
                   <select
                     value={reevalFilters.status}
-                    onChange={(e) => setReevalFilters((f) => ({ ...f, status: e.target.value }))}
+                    onChange={(e: any) => setReevalFilters((f) => ({ ...f, status: (e.target as HTMLSelectElement).value }))}
                     className="mt-1 w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
                   >
                     <option value="">Todos</option>
@@ -551,7 +551,7 @@ export default function RunDetailPage() {
                   <label className="block text-xs font-medium text-gray-700">Etiqueta</label>
                   <select
                     value={reevalFilters.label}
-                    onChange={(e) => setReevalFilters((f) => ({ ...f, label: e.target.value }))}
+                    onChange={(e: any) => setReevalFilters((f) => ({ ...f, label: (e.target as HTMLSelectElement).value }))}
                     className="mt-1 w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
                   >
                     <option value="">Todas</option>
@@ -565,7 +565,7 @@ export default function RunDetailPage() {
                   <input
                     type="text"
                     value={reevalFilters.findingType}
-                    onChange={(e) => setReevalFilters((f) => ({ ...f, findingType: e.target.value }))}
+                    onChange={(e: any) => setReevalFilters((f) => ({ ...f, findingType: (e.target as HTMLSelectElement).value }))}
                     placeholder="ej. wrong_price"
                     className="mt-1 w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
                   />
@@ -575,7 +575,7 @@ export default function RunDetailPage() {
                   <input
                     type="text"
                     value={reevalFilters.pattern}
-                    onChange={(e) => setReevalFilters((f) => ({ ...f, pattern: e.target.value }))}
+                    onChange={(e: any) => setReevalFilters((f) => ({ ...f, pattern: (e.target as HTMLSelectElement).value }))}
                     placeholder="ej. greeting"
                     className="mt-1 w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
                   />

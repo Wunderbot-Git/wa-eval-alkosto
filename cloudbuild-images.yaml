@@ -1,0 +1,28 @@
+steps:
+  # Build API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:latest'
+      - '-f'
+      - 'apps/api/Dockerfile'
+      - '.'
+
+  # Build Web image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:latest'
+      - '-f'
+      - 'apps/web/Dockerfile'
+      - '.'
+
+images:
+  - 'us-central1-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:latest'
+  - 'us-central1-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'

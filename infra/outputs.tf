@@ -1,11 +1,11 @@
 output "api_url" {
   description = "API Cloud Run service URL"
-  value       = google_cloud_run_v2_service.api.uri
+  value       = var.deploy_services ? google_cloud_run_v2_service.api[0].uri : "not deployed yet"
 }
 
 output "web_url" {
   description = "Web Cloud Run service URL"
-  value       = google_cloud_run_v2_service.web.uri
+  value       = var.deploy_services ? google_cloud_run_v2_service.web[0].uri : "not deployed yet"
 }
 
 output "postgres_private_ip" {

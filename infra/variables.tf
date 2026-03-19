@@ -34,3 +34,9 @@ variable "gemini_api_key" {
   sensitive   = true
   default     = ""
 }
+
+variable "deploy_services" {
+  description = "Set to true after Docker images are pushed to deploy Cloud Run services"
+  type        = bool
+  default     = false
+}
