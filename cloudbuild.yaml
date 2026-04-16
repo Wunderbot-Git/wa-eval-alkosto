@@ -31,11 +31,32 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web']
 
-  # Run Prisma migrations
-  - name: '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:${SHORT_SHA}'
-    entrypoint: 'npx'
-    args: ['prisma', 'migrate', 'deploy']
-    secretEnv: ['DATABASE_URL']
+  # Run Prisma migrations as a Cloud Run Job.
+  # Cloud SQL is private-IP only on eval-vpc, so Cloud Build workers can't
+  # reach it directly (Cloud Build runs outside the VPC). A Cloud Run Job
+  # configured with the eval-vpc-connector runs *inside* the VPC, reads
+  # DATABASE_URL from Secret Manager, and applies migrations natively.
+  #
+  # `gcloud run jobs deploy --execute-now --wait` creates-or-updates the job
+  # with the freshly built image and runs it once, propagating non-zero exit.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'jobs'
+      - 'deploy'
+      - 'eval-migrate'
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:${SHORT_SHA}'
+      - '--region=${_REGION}'
+      - '--vpc-connector=eval-vpc-connector'
+      - '--vpc-egress=all-traffic'
+      - '--set-secrets=DATABASE_URL=database-url:latest'
+      - '--command=sh'
+      - '--args=-c,cd /app/apps/api && HOME=/tmp npx prisma migrate deploy'
+      - '--max-retries=0'
+      - '--task-timeout=600'
+      - '--execute-now'
+      - '--wait'
 
   # Deploy API to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -66,10 +87,8 @@ steps:
 substitutions:
   _REGION: us-central1
 
-availableSecrets:
-  secretManager:
-    - versionName: projects/${PROJECT_ID}/secrets/database-url/versions/latest
-      env: DATABASE_URL
+# DATABASE_URL is consumed by the eval-migrate Cloud Run Job via --set-secrets,
+# not by Cloud Build itself, so no availableSecrets block is required here.
 
 options:
   logging: CLOUD_LOGGING_ONLY
