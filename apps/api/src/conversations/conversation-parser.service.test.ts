@@ -12,36 +12,36 @@ describe('ConversationParserService', () => {
     it('should parse ISO 8601 date', () => {
       const date = parser.parseDate('2026-01-23T11:50:30.000Z')
       expect(date).toBeTruthy()
-      expect(date!.getFullYear()).toBe(2026)
+      expect(date!.getUTCFullYear()).toBe(2026)
     })
 
     it('should parse US locale format with AM', () => {
       const date = parser.parseDate('1/23/2026, 11:50:30 AM')
       expect(date).toBeTruthy()
-      expect(date!.getFullYear()).toBe(2026)
-      expect(date!.getMonth()).toBe(0) // January
-      expect(date!.getDate()).toBe(23)
-      expect(date!.getHours()).toBe(11)
-      expect(date!.getMinutes()).toBe(50)
-      expect(date!.getSeconds()).toBe(30)
+      expect(date!.getUTCFullYear()).toBe(2026)
+      expect(date!.getUTCMonth()).toBe(0) // January
+      expect(date!.getUTCDate()).toBe(23)
+      expect(date!.getUTCHours()).toBe(11)
+      expect(date!.getUTCMinutes()).toBe(50)
+      expect(date!.getUTCSeconds()).toBe(30)
     })
 
     it('should parse US locale format with PM', () => {
       const date = parser.parseDate('12/5/2025, 3:15:00 PM')
       expect(date).toBeTruthy()
-      expect(date!.getHours()).toBe(15)
+      expect(date!.getUTCHours()).toBe(15)
     })
 
     it('should handle 12 AM as midnight', () => {
       const date = parser.parseDate('1/1/2026, 12:00:00 AM')
       expect(date).toBeTruthy()
-      expect(date!.getHours()).toBe(0)
+      expect(date!.getUTCHours()).toBe(0)
     })
 
     it('should handle 12 PM as noon', () => {
       const date = parser.parseDate('1/1/2026, 12:00:00 PM')
       expect(date).toBeTruthy()
-      expect(date!.getHours()).toBe(12)
+      expect(date!.getUTCHours()).toBe(12)
     })
 
     it('should return null for invalid date', () => {

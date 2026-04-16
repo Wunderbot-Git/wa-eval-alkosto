@@ -14,6 +14,10 @@ vi.mock('fs', () => ({
       'patterns/user.md': 'Classify: {{transcript}}',
       'consolidator/system.md': 'You are a consolidator.',
       'consolidator/user.md': 'Consolidate: {{integrity_results}}',
+      'extraction/system.md': 'You extract mentions and needs.',
+      'extraction/user.md': 'Extract from: {{transcript}}',
+      'recommendation/system.md': 'You judge recommendation fit.',
+      'recommendation/user.md': 'Judge: {{transcript}}',
     }
 
     for (const [key, content] of Object.entries(files)) {

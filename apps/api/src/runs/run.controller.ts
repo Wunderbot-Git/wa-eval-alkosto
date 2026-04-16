@@ -16,6 +16,7 @@ import type { Request } from 'express'
 import { RunService } from './run.service'
 import { PipelineService } from '../pipeline/pipeline.service'
 import { SharingService } from '../sharing/sharing.service'
+import { EvaluationQueueService } from '../queue/evaluation-queue.service'
 import { AuthGuard } from '../auth/auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
 import { Roles } from '../auth/roles.decorator'
@@ -26,7 +27,15 @@ export class RunController {
     private readonly runService: RunService,
     private readonly pipelineService: PipelineService,
     private readonly sharingService: SharingService,
+    private readonly queueService: EvaluationQueueService,
   ) {}
+
+  @Post('admin/drain-queue')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async drainQueue() {
+    return this.queueService.drain()
+  }
 
   @Post('upload')
   @UseGuards(AuthGuard, RolesGuard)

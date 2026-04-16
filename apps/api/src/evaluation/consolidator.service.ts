@@ -7,6 +7,8 @@ import type {
   IntegrityJudgeResult,
   QualityJudgeResult,
   PatternJudgeResult,
+  RecommendationJudgeResult,
+  ExtractedNeeds,
 } from '../judges/judge.interfaces'
 import { CONSOLIDATOR_JUDGE } from '../judges/judge.tokens'
 
@@ -16,6 +18,8 @@ export interface ConsolidationInput {
   integrity: IntegrityJudgeResult
   quality: QualityJudgeResult
   patterns: PatternJudgeResult
+  recommendation?: RecommendationJudgeResult | null
+  statedNeeds?: ExtractedNeeds | null
 }
 
 const LABEL_MAP: Record<string, string> = {
@@ -33,14 +37,20 @@ export class ConsolidatorService {
   ) {}
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidatorResult> {
-    const { conversationId, evaluationId, integrity, quality, patterns } = input
+    const {
+      conversationId,
+      evaluationId,
+      integrity,
+      quality,
+      patterns,
+      recommendation = null,
+      statedNeeds = null,
+    } = input
 
-    const result = await this.judge.consolidate(integrity, quality, patterns)
+    const result = await this.judge.consolidate(integrity, quality, patterns, recommendation)
 
-    // Collect prompt versions
     const promptVersions = this.getPromptVersions()
 
-    // Update evaluation record with consolidated results
     await this.prisma.evaluation.update({
       where: { id: evaluationId },
       data: {
@@ -49,12 +59,14 @@ export class ConsolidatorService {
         integrityFindings: integrity.findings as any,
         qualitySubScores: quality.subScores as any,
         patternClassifications: patterns.classifications as any,
+        recommendationFindings: (recommendation?.findings ?? null) as any,
+        recommendationSummary: recommendation?.summary ?? null,
+        extractedNeeds: (statedNeeds ?? null) as any,
         consolidatorExplanation: result.explanation,
         promptVersions: promptVersions as any,
       },
     })
 
-    // Create immutable snapshot
     await this.prisma.snapshot.create({
       data: {
         conversationId,
@@ -62,6 +74,8 @@ export class ConsolidatorService {
           integrity,
           quality,
           patterns,
+          recommendation,
+          extractedNeeds: statedNeeds,
           consolidator: result,
           promptVersions,
         } as any,
@@ -72,7 +86,14 @@ export class ConsolidatorService {
   }
 
   private getPromptVersions(): Record<string, string> {
-    const judges = ['integrity', 'quality', 'patterns', 'consolidator']
+    const judges = [
+      'integrity',
+      'quality',
+      'patterns',
+      'consolidator',
+      'extraction',
+      'recommendation',
+    ]
     const files = ['system.md', 'user.md']
     const versions: Record<string, string> = {}
 

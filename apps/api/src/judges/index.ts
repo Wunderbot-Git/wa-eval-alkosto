@@ -9,10 +9,19 @@ export type {
   PatternJudgeResult,
   ConsolidatorJudge,
   ConsolidatorResult,
+  ExtractionJudge,
+  ExtractionResult,
+  ExtractedNeeds,
+  RecommendationJudge,
+  RecommendationJudgeResult,
+  RecommendationFinding,
+  ProductSpecSheet,
 } from './judge.interfaces'
 export {
   INTEGRITY_JUDGE,
   QUALITY_JUDGE,
   PATTERN_JUDGE,
   CONSOLIDATOR_JUDGE,
+  EXTRACTION_JUDGE,
+  RECOMMENDATION_JUDGE,
 } from './judge.tokens'

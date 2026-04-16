@@ -4,6 +4,7 @@ import type {
   IntegrityJudgeResult,
   MessageLike,
   CatalogProductLike,
+  ProductSpecSheet,
 } from './judge.interfaces'
 
 @Injectable()
@@ -11,6 +12,7 @@ export class FakeIntegrityJudge implements IntegrityJudge {
   async evaluate(
     _transcript: MessageLike[],
     _catalog: CatalogProductLike[],
+    _mentionedSpecs: ProductSpecSheet[] = [],
   ): Promise<IntegrityJudgeResult> {
     return {
       findings: [

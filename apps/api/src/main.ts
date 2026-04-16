@@ -12,8 +12,13 @@ async function bootstrap() {
   // Structured logging with pino
   app.useLogger(app.get(Logger))
 
-  // Security headers
-  app.use(helmet())
+  // Security headers (relax cross-origin policies for CORS)
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      crossOriginOpenerPolicy: { policy: 'unsafe-none' },
+    }),
+  )
 
   // Cookie parsing
   app.use(cookieParser())

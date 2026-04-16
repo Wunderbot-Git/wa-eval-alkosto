@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import NavBar from '../../../../components/NavBar'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = '/api'
 
 interface Message {
   id: string
@@ -16,6 +16,7 @@ interface Message {
 
 interface Finding {
   id: string
+  module?: string
   type: string
   severity: 'WARNING' | 'CRITICAL'
   description: string
@@ -32,6 +33,14 @@ interface Pattern {
   messageIndex?: number | null
 }
 
+interface ExtractedNeeds {
+  use_case?: string | null
+  budget_min?: number | null
+  budget_max?: number | null
+  must_have_specs?: string[]
+  deal_breakers?: string[]
+}
+
 interface Evaluation {
   id: string
   score: number | null
@@ -39,6 +48,9 @@ interface Evaluation {
   integrityFindings: any
   qualitySubScores: any
   patternClassifications: any
+  recommendationFindings: any
+  recommendationSummary: string | null
+  extractedNeeds: ExtractedNeeds | null
   consolidatorExplanation: string | null
   findings: Finding[]
   patterns: Pattern[]
@@ -354,46 +366,41 @@ function EvaluationPanel({
       </div>
 
       {/* Integrity Section */}
-      {evaluation.findings.length > 0 && (
-        <div className="rounded-lg border border-gray-200 p-4">
-          <h3 className="mb-3 text-base font-semibold text-gray-900">Integridad</h3>
-          <div className="space-y-2">
-            {evaluation.findings.map((finding) => (
-              <div
-                key={finding.id}
-                className={`rounded border-l-4 bg-gray-50 p-3 ${
-                  finding.messageIndex != null ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''
-                }`}
-                style={{
-                  borderLeftColor:
-                    finding.severity === 'CRITICAL' ? '#ef4444' : '#f59e0b',
-                }}
-                onClick={() => {
-                  if (finding.messageIndex != null) {
-                    onScrollToMessage(finding.messageIndex)
-                  }
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <SeverityBadge severity={finding.severity} />
-                  <span className="text-sm font-medium text-gray-800">{finding.type}</span>
-                  {finding.messageIndex != null && (
-                    <span className="ml-auto rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                      Msg #{finding.messageIndex}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-sm text-gray-600">{finding.description}</p>
-                {finding.evidence && (
-                  <p className="mt-1 text-xs italic text-gray-400">
-                    Evidencia: {finding.evidence}
+      {(() => {
+        const integrityFindings = evaluation.findings.filter(
+          (f) => (f.module || 'integrity') === 'integrity',
+        )
+        const recommendationFindings = evaluation.findings.filter(
+          (f) => f.module === 'recommendation',
+        )
+        return (
+          <>
+            {integrityFindings.length > 0 && (
+              <div className="rounded-lg border border-gray-200 p-4">
+                <h3 className="mb-3 text-base font-semibold text-gray-900">Integridad</h3>
+                <FindingList findings={integrityFindings} onScrollToMessage={onScrollToMessage} />
+              </div>
+            )}
+
+            {(recommendationFindings.length > 0 || evaluation.recommendationSummary) && (
+              <div className="rounded-lg border border-gray-200 p-4">
+                <h3 className="mb-3 text-base font-semibold text-gray-900">Recomendación</h3>
+                {evaluation.recommendationSummary && (
+                  <p className="mb-3 text-sm leading-relaxed text-gray-700">
+                    {evaluation.recommendationSummary}
                   </p>
                 )}
+                {evaluation.extractedNeeds && (
+                  <ExtractedNeedsBlock needs={evaluation.extractedNeeds} />
+                )}
+                {recommendationFindings.length > 0 && (
+                  <FindingList findings={recommendationFindings} onScrollToMessage={onScrollToMessage} />
+                )}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
+          </>
+        )
+      })()}
 
       {/* Quality Section */}
       {evaluation.qualitySubScores && (
@@ -448,6 +455,95 @@ function EvaluationPanel({
             {evaluation.consolidatorExplanation}
           </p>
         </div>
+      )}
+    </div>
+  )
+}
+
+function FindingList({
+  findings,
+  onScrollToMessage,
+}: {
+  findings: Finding[]
+  onScrollToMessage: (index: number) => void
+}) {
+  return (
+    <div className="space-y-2">
+      {findings.map((finding) => (
+        <div
+          key={finding.id}
+          className={`rounded border-l-4 bg-gray-50 p-3 ${
+            finding.messageIndex != null ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''
+          }`}
+          style={{
+            borderLeftColor: finding.severity === 'CRITICAL' ? '#ef4444' : '#f59e0b',
+          }}
+          onClick={() => {
+            if (finding.messageIndex != null) {
+              onScrollToMessage(finding.messageIndex)
+            }
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <SeverityBadge severity={finding.severity} />
+            <span className="text-sm font-medium text-gray-800">{finding.type}</span>
+            {finding.messageIndex != null && (
+              <span className="ml-auto rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                Msg #{finding.messageIndex}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-gray-600">{finding.description}</p>
+          {finding.evidence && (
+            <p className="mt-1 text-xs italic text-gray-400">Evidencia: {finding.evidence}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ExtractedNeedsBlock({ needs }: { needs: ExtractedNeeds }) {
+  const hasAnything =
+    needs.use_case ||
+    needs.budget_min != null ||
+    needs.budget_max != null ||
+    (needs.must_have_specs && needs.must_have_specs.length > 0) ||
+    (needs.deal_breakers && needs.deal_breakers.length > 0)
+  if (!hasAnything) return null
+
+  const fmtBudget = () => {
+    if (needs.budget_min == null && needs.budget_max == null) return null
+    const min = needs.budget_min != null ? needs.budget_min.toLocaleString('es-CO') : '?'
+    const max = needs.budget_max != null ? needs.budget_max.toLocaleString('es-CO') : '?'
+    return `$${min} – $${max} COP`
+  }
+  const budget = fmtBudget()
+
+  return (
+    <div className="mb-3 rounded bg-blue-50 p-3 text-xs text-gray-700">
+      <p className="mb-1 font-semibold uppercase tracking-wide text-blue-700">
+        Necesidades del cliente
+      </p>
+      {needs.use_case && (
+        <p>
+          <span className="font-medium">Uso:</span> {needs.use_case}
+        </p>
+      )}
+      {budget && (
+        <p>
+          <span className="font-medium">Presupuesto:</span> {budget}
+        </p>
+      )}
+      {needs.must_have_specs && needs.must_have_specs.length > 0 && (
+        <p>
+          <span className="font-medium">Requisitos:</span> {needs.must_have_specs.join(', ')}
+        </p>
+      )}
+      {needs.deal_breakers && needs.deal_breakers.length > 0 && (
+        <p>
+          <span className="font-medium">Excluye:</span> {needs.deal_breakers.join(', ')}
+        </p>
       )}
     </div>
   )

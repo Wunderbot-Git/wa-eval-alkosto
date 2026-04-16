@@ -54,16 +54,33 @@ describe('IntegrityEvaluationService', () => {
   it('should call the integrity judge with transcript and catalog', async () => {
     await service.evaluate('eval-1', sampleMessages, sampleCatalog)
 
-    expect(judge.evaluate).toHaveBeenCalledWith(sampleMessages, sampleCatalog)
+    expect(judge.evaluate).toHaveBeenCalledWith(sampleMessages, sampleCatalog, [])
   })
 
-  it('should persist findings to the Finding model', async () => {
+  it('should forward mentioned product spec sheets to the judge', async () => {
+    const specs = [
+      {
+        externalId: '123',
+        title: 'TV 50"',
+        salePrice: 90,
+        category: 'Electronics',
+        brand: 'Samsung',
+        specs: { 'Tarjeta Grafica': 'GeForce® RTX 3050' },
+      },
+    ]
+    await service.evaluate('eval-1', sampleMessages, sampleCatalog, specs as any)
+
+    expect(judge.evaluate).toHaveBeenCalledWith(sampleMessages, sampleCatalog, specs)
+  })
+
+  it('should persist findings to the Finding model with module=integrity', async () => {
     await service.evaluate('eval-1', sampleMessages, sampleCatalog)
 
     expect(prisma.finding.createMany).toHaveBeenCalledWith({
       data: [
         {
           evaluationId: 'eval-1',
+          module: 'integrity',
           type: 'price_mismatch',
           severity: 'WARNING',
           description: 'Price mismatch detected',
@@ -114,6 +131,7 @@ describe('IntegrityEvaluationService', () => {
       data: [
         {
           evaluationId: 'eval-1',
+          module: 'integrity',
           type: 'price_mismatch',
           severity: 'WARNING',
           description: 'Price mismatch',
@@ -121,6 +139,7 @@ describe('IntegrityEvaluationService', () => {
         },
         {
           evaluationId: 'eval-1',
+          module: 'integrity',
           type: 'availability_error',
           severity: 'CRITICAL',
           description: 'Product unavailable but agent said it was in stock',

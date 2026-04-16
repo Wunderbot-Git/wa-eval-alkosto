@@ -1,6 +1,7 @@
-Evaluate the quality of the following conversation.
+Evaluate the following conversation's quality.
 
-## Transcript
-{{transcript}}
+## Transcript (JSON array of turns, each with `role` = "customer" or "agent", `content`, and `orderIndex`)
 
-Return your evaluation as JSON with score, subScores, and findings.
+{{TRANSCRIPT}}
+
+Return the evaluation as a JSON object with fields `score`, `subScores` (with keys `understanding`, `recommendation`, `fluency`), and `findings`. No markdown, no commentary — JSON only.

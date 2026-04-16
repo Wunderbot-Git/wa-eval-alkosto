@@ -67,6 +67,16 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name = "GEMINI_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.gemini_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
         name  = "API_PORT"
         value = "3001"
       }

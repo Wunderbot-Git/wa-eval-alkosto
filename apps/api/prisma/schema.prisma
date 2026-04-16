@@ -206,6 +206,9 @@ model Evaluation {
   integrityFindings        Json?
   qualitySubScores         Json?
   patternClassifications   Json?
+  recommendationFindings   Json?
+  recommendationSummary    String?
+  extractedNeeds           Json?
   consolidatorExplanation  String?
   promptVersions           Json?
   createdAt                DateTime         @default(now())
@@ -218,6 +221,7 @@ model Evaluation {
 model Finding {
   id           String          @id @default(uuid())
   evaluationId String
+  module       String          @default("integrity")
   type         String
   severity     FindingSeverity
   description  String
@@ -226,6 +230,7 @@ model Finding {
   evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
 
   @@index([evaluationId])
+  @@index([module])
 }
 
 model Pattern {

@@ -13,6 +13,7 @@ function makePrismaStub() {
     },
     evaluation: {
       create: vi.fn().mockResolvedValue({ id: 'eval-1' }),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       aggregate: vi.fn().mockResolvedValue({ _avg: { score: 7.5 } }),
     },
     run: {
@@ -24,6 +25,28 @@ function makePrismaStub() {
 function makeCatalogServiceStub() {
   return {
     findByDate: vi.fn(),
+    findProductsByExternalIds: vi.fn().mockResolvedValue([]),
+  }
+}
+
+function makeExtractionStub() {
+  return {
+    extract: vi.fn().mockResolvedValue({
+      mentionedExternalIds: [],
+      statedNeeds: {
+        use_case: null,
+        budget_min: null,
+        budget_max: null,
+        must_have_specs: [],
+        deal_breakers: [],
+      },
+    }),
+  }
+}
+
+function makeRecommendationEvalStub() {
+  return {
+    evaluate: vi.fn().mockResolvedValue({ findings: [], summary: 'no products' }),
   }
 }
 
@@ -85,6 +108,8 @@ describe('EvaluationWorker', () => {
   let qualityEval: ReturnType<typeof makeQualityEvalStub>
   let patternEval: ReturnType<typeof makePatternEvalStub>
   let consolidator: ReturnType<typeof makeConsolidatorStub>
+  let extractionService: ReturnType<typeof makeExtractionStub>
+  let recommendationEval: ReturnType<typeof makeRecommendationEvalStub>
 
   beforeEach(() => {
     prisma = makePrismaStub()
@@ -93,6 +118,8 @@ describe('EvaluationWorker', () => {
     qualityEval = makeQualityEvalStub()
     patternEval = makePatternEvalStub()
     consolidator = makeConsolidatorStub()
+    extractionService = makeExtractionStub()
+    recommendationEval = makeRecommendationEvalStub()
 
     worker = new EvaluationWorker(
       prisma as any,
@@ -101,6 +128,8 @@ describe('EvaluationWorker', () => {
       qualityEval as any,
       patternEval as any,
       consolidator as any,
+      extractionService as any,
+      recommendationEval as any,
     )
   })
 
@@ -143,20 +172,92 @@ describe('EvaluationWorker', () => {
     it('should call all evaluation services in order', async () => {
       await worker.processJob({ conversationId: 'conv-1', runId: 'run-1' })
 
+      expect(extractionService.extract).toHaveBeenCalledWith(
+        sampleConversation.messages,
+        [{ externalId: '123', title: 'TV', listPrice: 1000, salePrice: 900 }],
+      )
       expect(integrityEval.evaluate).toHaveBeenCalledWith(
         'eval-1',
         sampleConversation.messages,
         [{ externalId: '123', title: 'TV', listPrice: 1000, salePrice: 900 }],
+        [],
       )
       expect(qualityEval.evaluate).toHaveBeenCalledWith(sampleConversation.messages)
       expect(patternEval.evaluate).toHaveBeenCalledWith('eval-1', sampleConversation.messages)
+      expect(recommendationEval.evaluate).toHaveBeenCalledWith(
+        'eval-1',
+        sampleConversation.messages,
+        expect.objectContaining({ use_case: null }),
+        [],
+        [],
+      )
       expect(consolidator.consolidate).toHaveBeenCalledWith({
         conversationId: 'conv-1',
         evaluationId: 'eval-1',
         integrity: expect.objectContaining({ findings: expect.any(Array) }),
         quality: expect.objectContaining({ score: 7.5 }),
         patterns: expect.objectContaining({ classifications: expect.any(Array) }),
+        recommendation: expect.objectContaining({ findings: expect.any(Array) }),
+        statedNeeds: expect.objectContaining({ use_case: null }),
       })
+    })
+
+    it('should enrich integrity + recommendation with rawData specs for mentioned products', async () => {
+      extractionService.extract.mockResolvedValue({
+        mentionedExternalIds: ['123'],
+        statedNeeds: {
+          use_case: 'gaming',
+          budget_min: null,
+          budget_max: 5000000,
+          must_have_specs: ['16GB RAM'],
+          deal_breakers: [],
+        },
+      })
+      catalogService.findProductsByExternalIds.mockResolvedValue([
+        {
+          externalId: '123',
+          title: 'ASUS TUF A15',
+          listPrice: 4500000,
+          salePrice: 4200000,
+          availability: 12,
+          category: 'Computadores',
+          brand: 'ASUS',
+          rawData: {
+            'Tarjeta Grafica': 'GeForce® RTX 3050',
+            'Memoria RAM': '16 GB',
+            'Procesador': 'AMD R7',
+            'Software Incluidos': NaN,
+            'Es convertible': null,
+          },
+        },
+      ])
+      prisma.catalogProduct.findMany.mockResolvedValue([
+        { externalId: '123', title: 'ASUS TUF A15', listPrice: 4500000, salePrice: 4200000, category: 'Computadores', brand: 'ASUS' },
+        { externalId: '999', title: 'HP Pavilion', listPrice: 4000000, salePrice: 3800000, category: 'Computadores', brand: 'HP' },
+      ])
+
+      await worker.processJob({ conversationId: 'conv-1', runId: 'run-1' })
+
+      expect(catalogService.findProductsByExternalIds).toHaveBeenCalledWith('cat-1', ['123'])
+      const integrityCall = integrityEval.evaluate.mock.calls[0]
+      expect(integrityCall[3]).toEqual([
+        expect.objectContaining({
+          externalId: '123',
+          specs: expect.objectContaining({
+            'Tarjeta Grafica': 'GeForce® RTX 3050',
+            'Memoria RAM': '16 GB',
+          }),
+        }),
+      ])
+      // NaN / null fields are stripped
+      expect(integrityCall[3][0].specs).not.toHaveProperty('Software Incluidos')
+      expect(integrityCall[3][0].specs).not.toHaveProperty('Es convertible')
+
+      const recCall = recommendationEval.evaluate.mock.calls[0]
+      expect(recCall[2]).toMatchObject({ use_case: 'gaming', budget_max: 5000000 })
+      expect(recCall[4]).toEqual([
+        expect.objectContaining({ externalId: '999', category: 'Computadores' }),
+      ])
     })
 
     it('should update run counts and aggregate score', async () => {
@@ -295,7 +396,7 @@ describe('EvaluationWorker', () => {
       await worker.processJob({ conversationId: 'conv-1', runId: 'run-1' })
 
       expect(catalogService.findByDate).toHaveBeenCalledWith(
-        new Date(2026, 0, 28),
+        new Date(Date.UTC(2026, 0, 28)),
       )
     })
 
@@ -323,8 +424,8 @@ describe('EvaluationWorker', () => {
 
       await worker.processJob({ conversationId: 'conv-2', runId: 'run-1' })
 
-      expect(catalogService.findByDate).toHaveBeenCalledWith(new Date(2026, 0, 28))
-      expect(catalogService.findByDate).toHaveBeenCalledWith(new Date(2026, 1, 1))
+      expect(catalogService.findByDate).toHaveBeenCalledWith(new Date(Date.UTC(2026, 0, 28)))
+      expect(catalogService.findByDate).toHaveBeenCalledWith(new Date(Date.UTC(2026, 1, 1)))
     })
   })
 })

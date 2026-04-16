@@ -1,16 +1,17 @@
 import { Injectable } from '@nestjs/common'
 import type {
-  IntegrityJudge,
-  IntegrityJudgeResult,
+  RecommendationJudge,
+  RecommendationJudgeResult,
   MessageLike,
-  CatalogProductLike,
+  ExtractedNeeds,
   ProductSpecSheet,
+  CatalogProductLike,
 } from '../judge.interfaces'
 import { GeminiClientService } from './gemini-client.service'
 import { PromptLoaderService } from '../prompt-loader.service'
 
 @Injectable()
-export class GeminiIntegrityJudge implements IntegrityJudge {
+export class GeminiRecommendationJudge implements RecommendationJudge {
   constructor(
     private readonly gemini: GeminiClientService,
     private readonly promptLoader: PromptLoaderService,
@@ -18,22 +19,23 @@ export class GeminiIntegrityJudge implements IntegrityJudge {
 
   async evaluate(
     transcript: MessageLike[],
-    catalog: CatalogProductLike[],
-    mentionedSpecs: ProductSpecSheet[] = [],
-  ): Promise<IntegrityJudgeResult> {
-    const systemPrompt = this.promptLoader.getPrompt('integrity', 'system.md')
-    const userPrompt = this.promptLoader.getPrompt('integrity', 'user.md', {
+    statedNeeds: ExtractedNeeds,
+    mentionedSpecs: ProductSpecSheet[],
+    candidateAlternatives: CatalogProductLike[],
+  ): Promise<RecommendationJudgeResult> {
+    const systemPrompt = this.promptLoader.getPrompt('recommendation', 'system.md')
+    const userPrompt = this.promptLoader.getPrompt('recommendation', 'user.md', {
       TRANSCRIPT: JSON.stringify(transcript),
-      CATALOG: JSON.stringify(catalog),
+      STATED_NEEDS: JSON.stringify(statedNeeds),
       MENTIONED_SPECS: JSON.stringify(mentionedSpecs),
+      CANDIDATE_ALTERNATIVES: JSON.stringify(candidateAlternatives),
     })
 
-    const result = await this.gemini.generateJSON<IntegrityJudgeResult>(
+    const result = await this.gemini.generateJSON<RecommendationJudgeResult>(
       systemPrompt.content,
       userPrompt.content,
     )
 
-    // Ensure the result conforms to the expected shape
     return {
       findings: Array.isArray(result.findings)
         ? result.findings.map((f) => ({
@@ -43,6 +45,7 @@ export class GeminiIntegrityJudge implements IntegrityJudge {
             evidence: f.evidence ? String(f.evidence) : undefined,
           }))
         : [],
+      summary: result.summary ? String(result.summary) : undefined,
     }
   }
 }

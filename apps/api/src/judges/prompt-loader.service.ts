@@ -19,7 +19,14 @@ export class PromptLoaderService implements OnModuleInit {
   }
 
   onModuleInit() {
-    const judges = ['integrity', 'quality', 'patterns', 'consolidator']
+    const judges = [
+      'integrity',
+      'quality',
+      'patterns',
+      'consolidator',
+      'extraction',
+      'recommendation',
+    ]
     const files = ['system.md', 'user.md']
 
     for (const judge of judges) {

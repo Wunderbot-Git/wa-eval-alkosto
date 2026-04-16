@@ -26,18 +26,18 @@ describe('CatalogService', () => {
       const date = service.extractDateFromFilename(
         'filtered_products_20260128_080002.json',
       )
-      expect(date.getFullYear()).toBe(2026)
-      expect(date.getMonth()).toBe(0) // January = 0
-      expect(date.getDate()).toBe(28)
+      expect(date.getUTCFullYear()).toBe(2026)
+      expect(date.getUTCMonth()).toBe(0) // January = 0
+      expect(date.getUTCDate()).toBe(28)
     })
 
     it('should extract date from filename without extra parts', () => {
       const date = service.extractDateFromFilename(
         'filtered_products_20251215.json',
       )
-      expect(date.getFullYear()).toBe(2025)
-      expect(date.getMonth()).toBe(11) // December = 11
-      expect(date.getDate()).toBe(15)
+      expect(date.getUTCFullYear()).toBe(2025)
+      expect(date.getUTCMonth()).toBe(11) // December = 11
+      expect(date.getUTCDate()).toBe(15)
     })
 
     it('should throw for invalid filename', () => {

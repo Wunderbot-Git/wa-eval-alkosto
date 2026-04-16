@@ -5,6 +5,7 @@ import type {
   IntegrityJudgeResult,
   QualityJudgeResult,
   PatternJudgeResult,
+  RecommendationJudgeResult,
 } from '../judge.interfaces'
 import { GeminiClientService } from './gemini-client.service'
 import { PromptLoaderService } from '../prompt-loader.service'
@@ -20,12 +21,14 @@ export class GeminiConsolidatorJudge implements ConsolidatorJudge {
     integrity: IntegrityJudgeResult | null,
     quality: QualityJudgeResult | null,
     patterns: PatternJudgeResult | null,
+    recommendation: RecommendationJudgeResult | null = null,
   ): Promise<ConsolidatorResult> {
     const systemPrompt = this.promptLoader.getPrompt('consolidator', 'system.md')
     const userPrompt = this.promptLoader.getPrompt('consolidator', 'user.md', {
       INTEGRITY: JSON.stringify(integrity),
       QUALITY: JSON.stringify(quality),
       PATTERNS: JSON.stringify(patterns),
+      RECOMMENDATION: JSON.stringify(recommendation),
     })
 
     const result = await this.gemini.generateJSON<ConsolidatorResult>(

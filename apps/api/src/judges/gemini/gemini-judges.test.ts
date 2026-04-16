@@ -75,6 +75,7 @@ describe('GeminiIntegrityJudge', () => {
     expect(promptLoader.getPrompt).toHaveBeenCalledWith('integrity', 'user.md', {
       TRANSCRIPT: JSON.stringify(sampleMessages),
       CATALOG: JSON.stringify(sampleCatalog),
+      MENTIONED_SPECS: '[]',
     })
   })
 

@@ -58,8 +58,73 @@ export interface CatalogProductLike {
   brand?: string | null
 }
 
+/**
+ * Full structured spec sheet for a single product, derived from the canonical
+ * Alkosto source row stored in CatalogProduct.rawData. Sent to the integrity
+ * and recommendation judges only for the products actually mentioned in the
+ * conversation, to keep payloads bounded.
+ */
+export interface ProductSpecSheet {
+  externalId: string
+  title: string
+  listPrice?: number | null
+  salePrice?: number | null
+  availability?: number | null
+  category?: string | null
+  brand?: string | null
+  /** Canonical structured fields from rawData (Tarjeta Grafica, Memoria RAM,
+   *  Procesador, Capacidad de Disco, Sistema Operativo, etc.). NaN / null
+   *  values are stripped by the worker before sending to the LLM. */
+  specs: Record<string, string | number | boolean | null>
+}
+
+export interface ExtractedNeeds {
+  use_case?: string | null
+  budget_min?: number | null
+  budget_max?: number | null
+  must_have_specs?: string[]
+  deal_breakers?: string[]
+}
+
+export interface ExtractionResult {
+  mentionedExternalIds: string[]
+  statedNeeds: ExtractedNeeds
+}
+
+export interface ExtractionJudge {
+  evaluate(
+    transcript: MessageLike[],
+    catalog: CatalogProductLike[],
+  ): Promise<ExtractionResult>
+}
+
+export interface RecommendationFinding {
+  type: string
+  severity: 'WARNING' | 'CRITICAL'
+  description: string
+  evidence?: string
+}
+
+export interface RecommendationJudgeResult {
+  findings: RecommendationFinding[]
+  summary?: string
+}
+
+export interface RecommendationJudge {
+  evaluate(
+    transcript: MessageLike[],
+    statedNeeds: ExtractedNeeds,
+    mentionedSpecs: ProductSpecSheet[],
+    candidateAlternatives: CatalogProductLike[],
+  ): Promise<RecommendationJudgeResult>
+}
+
 export interface IntegrityJudge {
-  evaluate(transcript: MessageLike[], catalog: CatalogProductLike[]): Promise<IntegrityJudgeResult>
+  evaluate(
+    transcript: MessageLike[],
+    catalog: CatalogProductLike[],
+    mentionedSpecs?: ProductSpecSheet[],
+  ): Promise<IntegrityJudgeResult>
 }
 
 export interface QualityJudge {
@@ -75,5 +140,6 @@ export interface ConsolidatorJudge {
     integrity: IntegrityJudgeResult | null,
     quality: QualityJudgeResult | null,
     patterns: PatternJudgeResult | null,
+    recommendation?: RecommendationJudgeResult | null,
   ): Promise<ConsolidatorResult>
 }

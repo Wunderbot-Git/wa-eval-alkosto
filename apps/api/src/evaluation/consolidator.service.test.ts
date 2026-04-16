@@ -69,7 +69,7 @@ describe('ConsolidatorService', () => {
     service = new ConsolidatorService(prisma as any, promptLoader as any, judge)
   })
 
-  it('should call the consolidator judge with all three judge results', async () => {
+  it('should call the consolidator judge with all four judge results', async () => {
     await service.consolidate({
       conversationId: 'conv-1',
       evaluationId: 'eval-1',
@@ -82,16 +82,55 @@ describe('ConsolidatorService', () => {
       sampleIntegrity,
       sampleQuality,
       samplePatterns,
+      null,
     )
   })
 
-  it('should update the evaluation record with consolidated results', async () => {
+  it('should forward recommendation result to the judge when provided', async () => {
+    const rec = {
+      findings: [
+        {
+          type: 'over_spec_for_need',
+          severity: 'WARNING' as const,
+          description: 'over-spec',
+          evidence: 'ev',
+        },
+      ],
+      summary: 'plausible',
+    }
     await service.consolidate({
       conversationId: 'conv-1',
       evaluationId: 'eval-1',
       integrity: sampleIntegrity,
       quality: sampleQuality,
       patterns: samplePatterns,
+      recommendation: rec,
+    })
+
+    expect(judge.consolidate).toHaveBeenCalledWith(
+      sampleIntegrity,
+      sampleQuality,
+      samplePatterns,
+      rec,
+    )
+  })
+
+  it('should update the evaluation record with consolidated results (incl recommendation)', async () => {
+    const rec = {
+      findings: [
+        { type: 't', severity: 'CRITICAL' as const, description: 'd', evidence: 'e' },
+      ],
+      summary: 'sum',
+    }
+    const needs = { use_case: 'gaming' }
+    await service.consolidate({
+      conversationId: 'conv-1',
+      evaluationId: 'eval-1',
+      integrity: sampleIntegrity,
+      quality: sampleQuality,
+      patterns: samplePatterns,
+      recommendation: rec,
+      statedNeeds: needs as any,
     })
 
     expect(prisma.evaluation.update).toHaveBeenCalledWith({
@@ -102,6 +141,9 @@ describe('ConsolidatorService', () => {
         integrityFindings: sampleIntegrity.findings,
         qualitySubScores: sampleQuality.subScores,
         patternClassifications: samplePatterns.classifications,
+        recommendationFindings: rec.findings,
+        recommendationSummary: 'sum',
+        extractedNeeds: needs,
         consolidatorExplanation: 'Moderate quality with some findings',
         promptVersions: expect.any(Object),
       }),
@@ -124,6 +166,8 @@ describe('ConsolidatorService', () => {
           integrity: sampleIntegrity,
           quality: sampleQuality,
           patterns: samplePatterns,
+          recommendation: null,
+          extractedNeeds: null,
           consolidator: {
             score: 7.5,
             label: 'con_hallazgos',
@@ -202,11 +246,13 @@ describe('ConsolidatorService', () => {
       patterns: samplePatterns,
     })
 
-    // 4 judges x 2 files = 8 calls
-    expect(promptLoader.getVersion).toHaveBeenCalledTimes(8)
+    // 6 judges x 2 files = 12 calls
+    expect(promptLoader.getVersion).toHaveBeenCalledTimes(12)
     expect(promptLoader.getVersion).toHaveBeenCalledWith('integrity', 'system.md')
     expect(promptLoader.getVersion).toHaveBeenCalledWith('integrity', 'user.md')
     expect(promptLoader.getVersion).toHaveBeenCalledWith('quality', 'system.md')
     expect(promptLoader.getVersion).toHaveBeenCalledWith('consolidator', 'user.md')
+    expect(promptLoader.getVersion).toHaveBeenCalledWith('extraction', 'system.md')
+    expect(promptLoader.getVersion).toHaveBeenCalledWith('recommendation', 'user.md')
   })
 })

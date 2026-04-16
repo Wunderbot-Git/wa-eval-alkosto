@@ -17,7 +17,8 @@ export class CatalogService {
       )
     }
     const [, year, month, day] = match
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    // Use UTC to avoid timezone shifts with @db.Date
+    return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)))
   }
 
   /**
@@ -88,6 +89,22 @@ export class CatalogService {
   async findAll() {
     return this.prisma.catalog.findMany({
       orderBy: { catalogDate: 'desc' },
+    })
+  }
+
+  /**
+   * Fetch full structured product rows (including `rawData`) for the given
+   * external ids within a single catalog. Returns at most `ids.length` rows.
+   * Used to enrich the integrity + recommendation judges with the canonical
+   * spec sheet for products mentioned in the conversation.
+   */
+  async findProductsByExternalIds(catalogId: string, externalIds: string[]) {
+    if (externalIds.length === 0) return []
+    return this.prisma.catalogProduct.findMany({
+      where: {
+        catalogId,
+        externalId: { in: externalIds },
+      },
     })
   }
 }

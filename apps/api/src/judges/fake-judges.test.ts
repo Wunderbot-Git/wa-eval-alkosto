@@ -3,6 +3,8 @@ import { FakeIntegrityJudge } from './fake-integrity.judge'
 import { FakeQualityJudge } from './fake-quality.judge'
 import { FakePatternJudge } from './fake-pattern.judge'
 import { FakeConsolidatorJudge } from './fake-consolidator.judge'
+import { FakeExtractionJudge } from './fake-extraction.judge'
+import { FakeRecommendationJudge } from './fake-recommendation.judge'
 
 const sampleMessages = [
   { role: 'CUSTOMER', content: 'Hello', orderIndex: 0 },
@@ -95,6 +97,33 @@ describe('FakeConsolidatorJudge', () => {
     expect(result.label).toBe('fallida')
   })
 
+  it('should mark fallida when integrity has a CRITICAL finding even if quality is great', async () => {
+    const result = await consolidator.consolidate(
+      { findings: [{ type: 'price_mismatch', severity: 'CRITICAL', description: 'd' }] },
+      { score: 9.0, subScores: { understanding: 9, recommendation: 9, fluency: 9 }, findings: [] },
+      null,
+    )
+    expect(result.label).toBe('fallida')
+  })
+
+  it('should subtract for recommendation findings', async () => {
+    const result = await consolidator.consolidate(
+      null,
+      { score: 8.0, subScores: { understanding: 8, recommendation: 8, fluency: 8 }, findings: [] },
+      null,
+      {
+        findings: [
+          { type: 'over_spec_for_need', severity: 'WARNING', description: 'd' },
+          { type: 'over_spec_for_need', severity: 'WARNING', description: 'd' },
+        ],
+        summary: 's',
+      },
+    )
+    // 8.0 - 0.4 - 0.4 = 7.2
+    expect(result.score).toBeCloseTo(7.2, 1)
+    expect(result.label).toBe('con_hallazgos')
+  })
+
   it('should label "con_hallazgos" at exactly 6.0', async () => {
     const result = await consolidator.consolidate(
       null,
@@ -111,5 +140,51 @@ describe('FakeConsolidatorJudge', () => {
       null,
     )
     expect(result.label).toBe('aprobada')
+  })
+})
+
+describe('FakeExtractionJudge', () => {
+  it('matches catalog products whose title shares a 6+ char token with the agent text', async () => {
+    const judge = new FakeExtractionJudge()
+    const transcript = [
+      { role: 'AGENT', content: 'Te recomiendo la pavilion para diseño', orderIndex: 0 },
+    ]
+    const catalog = [
+      { externalId: '1', title: 'HP Pavilion 15-eh3' },
+      { externalId: '2', title: 'Apple iPad' },
+    ]
+    const result = await judge.evaluate(transcript as any, catalog as any)
+    expect(result.mentionedExternalIds).toContain('1')
+    expect(result.mentionedExternalIds).not.toContain('2')
+    expect(result.statedNeeds.use_case).toBeNull()
+  })
+
+  it('returns empty when nothing matches', async () => {
+    const judge = new FakeExtractionJudge()
+    const result = await judge.evaluate(
+      [{ role: 'AGENT', content: 'hello world', orderIndex: 0 }] as any,
+      [{ externalId: '1', title: 'lorem ipsum' }] as any,
+    )
+    expect(result.mentionedExternalIds).toEqual([])
+  })
+})
+
+describe('FakeRecommendationJudge', () => {
+  it('returns no findings when no products were discussed', async () => {
+    const judge = new FakeRecommendationJudge()
+    const result = await judge.evaluate([] as any, {} as any, [], [])
+    expect(result.findings).toEqual([])
+  })
+
+  it('returns one warning finding when products were discussed', async () => {
+    const judge = new FakeRecommendationJudge()
+    const result = await judge.evaluate(
+      [] as any,
+      {} as any,
+      [{ externalId: '1', title: 't', specs: {} } as any],
+      [],
+    )
+    expect(result.findings).toHaveLength(1)
+    expect(result.findings[0].severity).toBe('WARNING')
   })
 })

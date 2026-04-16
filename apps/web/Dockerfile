@@ -15,10 +15,10 @@ RUN pnpm install --frozen-lockfile
 # Build shared
 RUN cd packages/shared && pnpm run build
 
-# Build Next.js
+# Build Next.js (API calls go through same-origin /api rewrite)
 ENV NEXT_TELEMETRY_DISABLED=1
-ARG NEXT_PUBLIC_API_URL=https://eval-api-545953473121.us-central1.run.app
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG BACKEND_URL=https://eval-api-545953473121.us-central1.run.app
+ENV BACKEND_URL=$BACKEND_URL
 RUN cd apps/web && pnpm run build
 
 # Create non-root user

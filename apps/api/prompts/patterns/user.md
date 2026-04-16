@@ -1,6 +1,7 @@
 Classify the following conversation into patterns.
 
-## Transcript
-{{transcript}}
+## Transcript (JSON array; each turn has `role` = "customer"/"agent", `content`, `orderIndex`)
 
-Return classifications as a JSON array.
+{{TRANSCRIPT}}
+
+Return a JSON object with a `classifications` array per the schema in the system prompt. No commentary, JSON only.

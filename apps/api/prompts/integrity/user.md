@@ -1,9 +1,15 @@
 Evaluate the following conversation for data integrity issues.
 
-## Transcript
-{{transcript}}
+## Transcript (JSON array; each turn has `role` = "customer"/"agent", `content`, `orderIndex`)
 
-## Catalog Products
-{{catalog_products}}
+{{TRANSCRIPT}}
 
-Return your findings as a JSON array.
+## Catalog index (slim — JSON array of every product available on the conversation's date; each has `externalId`, `title`, `listPrice`, `salePrice`, `category`, `brand`)
+
+{{CATALOG}}
+
+## Mentioned product spec sheets (full structured fields for products referenced in the conversation — TRUST THESE OVER THE TITLE)
+
+{{MENTIONED_SPECS}}
+
+Return a JSON object with a `findings` array per the schema in the system prompt. No commentary, JSON only.

@@ -1,35 +1,41 @@
 import { Injectable, Inject } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import type {
-  IntegrityJudge,
-  IntegrityJudgeResult,
+  RecommendationJudge,
+  RecommendationJudgeResult,
   MessageLike,
-  CatalogProductLike,
+  ExtractedNeeds,
   ProductSpecSheet,
+  CatalogProductLike,
 } from '../judges/judge.interfaces'
-import { INTEGRITY_JUDGE } from '../judges/judge.tokens'
+import { RECOMMENDATION_JUDGE } from '../judges/judge.tokens'
 
 @Injectable()
-export class IntegrityEvaluationService {
+export class RecommendationEvaluationService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(INTEGRITY_JUDGE) private readonly judge: IntegrityJudge,
+    @Inject(RECOMMENDATION_JUDGE) private readonly judge: RecommendationJudge,
   ) {}
 
   async evaluate(
     evaluationId: string,
     transcript: MessageLike[],
-    catalog: CatalogProductLike[],
-    mentionedSpecs: ProductSpecSheet[] = [],
-  ): Promise<IntegrityJudgeResult> {
-    const result = await this.judge.evaluate(transcript, catalog, mentionedSpecs)
+    statedNeeds: ExtractedNeeds,
+    mentionedSpecs: ProductSpecSheet[],
+    candidateAlternatives: CatalogProductLike[],
+  ): Promise<RecommendationJudgeResult> {
+    const result = await this.judge.evaluate(
+      transcript,
+      statedNeeds,
+      mentionedSpecs,
+      candidateAlternatives,
+    )
 
-    // Persist findings to the Finding model
     if (result.findings.length > 0) {
       await this.prisma.finding.createMany({
         data: result.findings.map((f) => ({
           evaluationId,
-          module: 'integrity',
+          module: 'recommendation',
           type: f.type,
           severity: f.severity as any,
           description: f.description,
