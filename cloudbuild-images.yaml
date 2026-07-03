@@ -4,24 +4,31 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:latest'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:latest'
       - '-f'
       - 'apps/api/Dockerfile'
       - '.'
 
-  # Build Web image
+  # Build Web image (BACKEND_URL is baked into the Next.js build)
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:latest'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:latest'
+      - '--build-arg'
+      - 'BACKEND_URL=${_BACKEND_URL}'
       - '-f'
       - 'apps/web/Dockerfile'
       - '.'
 
 images:
-  - 'us-central1-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:latest'
-  - 'us-central1-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:latest'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-api:latest'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:latest'
+
+substitutions:
+  _REGION: us-central1
+  # API service URL for this project: https://eval-api-PROJECT_NUMBER.REGION.run.app
+  _BACKEND_URL: http://localhost:3001
 
 options:
   logging: CLOUD_LOGGING_ONLY

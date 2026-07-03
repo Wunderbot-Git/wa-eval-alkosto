@@ -7,6 +7,9 @@ export interface EnvConfig {
   SESSION_MAX_AGE_HOURS: number
   WORKER_CONCURRENCY: number
   GEMINI_API_KEY?: string
+  GEMINI_USE_VERTEX: boolean
+  GOOGLE_CLOUD_PROJECT?: string
+  GOOGLE_CLOUD_LOCATION?: string
   GEMINI_MODEL: string
   CORS_ORIGIN: string
 }
@@ -33,6 +36,9 @@ export function loadEnv(): EnvConfig {
     SESSION_MAX_AGE_HOURS: parseInt(optional('SESSION_MAX_AGE_HOURS', '24'), 10),
     WORKER_CONCURRENCY: parseInt(optional('WORKER_CONCURRENCY', '5'), 10),
     GEMINI_API_KEY: process.env.GEMINI_API_KEY || undefined,
+    GEMINI_USE_VERTEX: process.env.GEMINI_USE_VERTEX === 'true',
+    GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT || undefined,
+    GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION || undefined,
     GEMINI_MODEL: optional('GEMINI_MODEL', 'gemini-2.0-flash'),
     CORS_ORIGIN: optional('CORS_ORIGIN', 'http://localhost:3000'),
   }

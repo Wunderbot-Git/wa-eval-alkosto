@@ -5,7 +5,7 @@ import { FakePatternJudge } from './fake-pattern.judge'
 import { FakeConsolidatorJudge } from './fake-consolidator.judge'
 import { FakeExtractionJudge } from './fake-extraction.judge'
 import { FakeRecommendationJudge } from './fake-recommendation.judge'
-import { GeminiClientService } from './gemini/gemini-client.service'
+import { GeminiClientService, resolveGeminiMode } from './gemini/gemini-client.service'
 import { GeminiIntegrityJudge } from './gemini/gemini-integrity.judge'
 import { GeminiQualityJudge } from './gemini/gemini-quality.judge'
 import { GeminiPatternJudge } from './gemini/gemini-pattern.judge'
@@ -22,14 +22,17 @@ import {
   RECOMMENDATION_JUDGE,
 } from './judge.tokens'
 
-const useGemini = !!process.env.GEMINI_API_KEY
+const geminiMode = resolveGeminiMode()
+const useGemini = geminiMode !== 'fake'
 
 const logger = new Logger('JudgesModule')
 
-if (useGemini) {
-  logger.log('Using Gemini judges (GEMINI_API_KEY is set)')
+if (geminiMode === 'vertex') {
+  logger.log('Using Gemini judges via Vertex AI (GEMINI_USE_VERTEX=true)')
+} else if (geminiMode === 'api_key') {
+  logger.log('Using Gemini judges via API key (GEMINI_API_KEY is set)')
 } else {
-  logger.log('Using fake judges (GEMINI_API_KEY not set)')
+  logger.log('Using fake judges (neither GEMINI_USE_VERTEX nor GEMINI_API_KEY is set)')
 }
 
 const geminiProviders = [

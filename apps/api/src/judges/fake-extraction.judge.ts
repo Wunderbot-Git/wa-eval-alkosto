@@ -7,7 +7,7 @@ import type {
 } from './judge.interfaces'
 
 /**
- * Deterministic fake used when GEMINI_API_KEY is unset.
+ * Deterministic fake used when no Gemini access is configured.
  * Picks up to 3 catalog ids whose title shares a 6+ char substring with any
  * agent message. Returns no statedNeeds — tests that need them mock the judge.
  */

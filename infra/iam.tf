@@ -18,6 +18,14 @@ resource "google_project_iam_member" "cloudrun_secrets" {
   member  = "serviceAccount:${google_service_account.cloudrun.email}"
 }
 
+# Vertex AI user (only needed when judges call Gemini via Vertex AI)
+resource "google_project_iam_member" "cloudrun_vertex" {
+  count   = var.gemini_mode == "vertex" ? 1 : 0
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
 # Allow secret access per secret
 locals {
   secrets = [
