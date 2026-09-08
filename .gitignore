@@ -20,3 +20,14 @@ combined*.json
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+yalo_export.csv
+job_*.csv
+.local/
+__pycache__/
+
+# Source reference uploads and internal checklists: not application assets
+/02092026-Checklist*.xlsx
+/dashboard_ui*.webp
+/design_system_alkosto_*.png
+/Logo-alkosto.svg
+/Logo_Yalo.png

@@ -138,7 +138,7 @@ export default function RunsPage() {
                       <td className="px-4 py-3 text-center">{run.evaluatedCount}</td>
                       <td className="px-4 py-3 text-center">
                         {run.aggregateScore !== null
-                          ? `${(run.aggregateScore * 100).toFixed(1)}%`
+                          ? `${run.aggregateScore.toFixed(1)}/10`
                           : '-'}
                       </td>
                       <td className="px-4 py-3">

@@ -10,6 +10,9 @@ export class PipelineService {
   ) {}
 
   async launchRun(runId: string) {
+    if (process.env.NODE_ENV !== 'test' && !process.env.GEMINI_API_KEY && process.env.EVALUATION_MODE !== 'demo') {
+      throw new BadRequestException('El evaluador anterior requiere Gemini. Utiliza Revisión V1 para Vertex AI; no se generan evaluaciones ficticias.')
+    }
     const run = await this.prisma.run.findUnique({ where: { id: runId } })
     if (!run) {
       throw new NotFoundException('Run not found')

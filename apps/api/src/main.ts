@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { NestFactory } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 import { Logger } from 'nestjs-pino'
@@ -44,7 +45,7 @@ async function bootstrap() {
   })
 
   const port = process.env.API_PORT || 3001
-  await app.listen(port)
+  await app.listen(port, process.env.API_HOST || '127.0.0.1')
   console.log(`API running on http://localhost:${port}`)
 }
 bootstrap()
