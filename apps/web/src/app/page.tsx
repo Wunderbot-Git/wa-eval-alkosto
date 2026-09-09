@@ -32,7 +32,7 @@ export default function Home() {
   // Redirect authenticated users to dashboard
   useEffect(() => {
     if (user) {
-      router.push('/dashboard')
+      router.push(user.role === 'YALO_READER' ? '/shared' : '/workspace')
     }
   }, [user, router])
 

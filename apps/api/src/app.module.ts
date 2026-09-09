@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { WorkspaceModule } from './workspace/workspace.module'
 import { APP_GUARD } from '@nestjs/core'
 import { ScheduleModule } from '@nestjs/schedule'
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler'
@@ -22,6 +23,7 @@ import { ReevaluationModule } from './reevaluation/reevaluation.module'
 
 @Module({
   imports: [
+    WorkspaceModule,
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{
       ttl: 60000,
@@ -29,6 +31,7 @@ import { ReevaluationModule } from './reevaluation/reevaluation.module'
     }]),
     LoggerModule.forRoot({
       pinoHttp: {
+        redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
         genReqId: (req: any) => {
           return req.headers['x-correlation-id'] || require('crypto').randomUUID()
         },

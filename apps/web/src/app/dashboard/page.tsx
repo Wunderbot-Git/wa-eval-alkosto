@@ -203,7 +203,7 @@ export default function DashboardPage() {
                   <StatusBadge status={latestRun.status} />
                   {latestRun.aggregateScore !== null && (
                     <p className="mt-1 text-2xl font-bold text-gray-900">
-                      {(latestRun.aggregateScore * 100).toFixed(1)}%
+                      {latestRun.aggregateScore.toFixed(1)}/10
                     </p>
                   )}
                 </div>

@@ -21,6 +21,7 @@ export default function NavBar({ userEmail, userRole, onLogout }: NavBarProps) {
     <nav className="border-b bg-white px-6 py-3">
       <div className="flex items-center gap-6">
         <h1 className="text-lg font-bold text-gray-900">Sistema de Evaluacion</h1>
+        {isAdmin && <Link href="/workspace" className={isActive('/workspace')}>Revisión V1</Link>}
         <Link href="/dashboard" className={isActive('/dashboard')}>
           Dashboard
         </Link>
