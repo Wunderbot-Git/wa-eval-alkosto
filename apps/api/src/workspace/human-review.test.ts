@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { reviewAction, reviewState } from './human-review'
-import { WorkspaceService } from './workspace.service'
-const payload = { rubricVersion: 'pilot-2', verdict: { criteria: [{ name: 'adecuacion', status: 'INCUMPLE' }] } }
+import { RUBRIC_VERSION, WorkspaceService } from './workspace.service'
+const payload = { rubricVersion: RUBRIC_VERSION, verdict: { criteria: [{ name: 'adecuacion', status: 'INCUMPLE' }] } }
 const events = [{ id: 'e1' }]
 const act = (p: any, body: any) => reviewAction(p, events, body, 'u1')
 describe('guided review safeguards', () => {
