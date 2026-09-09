@@ -32,15 +32,39 @@ export const outcomeNames: Record<string, string> = {
   AGENTE_SIN_RESPUESTA: 'Agente no respondió al último mensaje',
   FINAL_SIN_PREGUNTA: 'Terminó sin pregunta pendiente',
 }
+// Session reconstruction confidence (conversations are rebuilt from bare
+// messages — no session id in the shared BigQuery view).
+export const reconstructionNames: Record<string, string> = { ALTA: 'Confiable', MEDIA: 'Inferida', BAJA: 'Incierta' }
+export function reconstructionNotes(r: Row | null | undefined): string[] {
+  if (!r) return []
+  const starts: Record<string, string> = {
+    REINICIO: 'Inicio confirmado por reinicio',
+    TRAS_CIERRE: 'Inicio tras el cierre Yalo de la conversación anterior',
+    PRIMER_CONTACTO: 'Primer contacto observado del cliente',
+    TRAS_INACTIVIDAD: `Separada de la conversación anterior por ${r.gapBeforeMin} min de inactividad`,
+    BORDE_DE_DATOS: 'Comienza cerca del inicio de los datos importados: puede faltar contexto anterior',
+  }
+  const ends: Record<string, string> = {
+    CIERRE_YALO: 'Final confirmado por cierre Yalo',
+    REINICIO: 'Final por reinicio posterior',
+    INACTIVIDAD: `Separada de la siguiente por ${r.gapAfterMin} min de inactividad`,
+    SILENCIO: 'El cliente no volvió a escribir',
+    BORDE_DE_DATOS: 'Termina cerca del final de los datos importados: puede continuar después',
+  }
+  const notes = [starts[r.startReason], ends[r.endReason]]
+  if (r.startReason === 'TRAS_INACTIVIDAD' && r.gapBeforeMin < 90) notes.push('La separación inicial está justo sobre el umbral de 1 h: podría ser la misma conversación que la anterior')
+  if (r.endReason === 'INACTIVIDAD' && r.gapAfterMin < 90) notes.push('La separación final está justo sobre el umbral de 1 h: podría continuar en la siguiente')
+  return notes.filter(Boolean)
+}
 export function categoriesOf(s: Row): string[] {
   const raw: string[] = s.assessment?.categories?.length ? s.assessment.categories : [s.assessment?.category || 'Sin categoría evaluada']
   const aliases: Record<string, string> = { computador: 'Computadores', computadores: 'Computadores', portátil: 'Computadores', 'portátil gamer': 'Computadores', portátiles: 'Computadores', laptop: 'Computadores', laptops: 'Computadores', impresora: 'Impresoras', impresoras: 'Impresoras', monitor: 'Monitores', monitores: 'Monitores', televisor: 'Televisores', televisores: 'Televisores', celular: 'Celulares', celulares: 'Celulares' }
   return [...new Set(raw.map(c => aliases[c.trim().toLowerCase()] || c))]
 }
 export const localDay = (value: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
-export function filterRows(rows: Row[], f: { from: string; to: string; category: string; review: string; outcome: string; search: string }) {
+export function filterRows(rows: Row[], f: { from: string; to: string; category: string; review: string; outcome: string; rec: string; search: string }) {
   return rows.filter(s => (!f.from || localDay(s.start) >= f.from) && (!f.to || localDay(s.start) <= f.to)
     && (!f.category || categoriesOf(s).includes(f.category)) && (!f.review || reviewOf(s) === f.review)
-    && (!f.outcome || s.outcome === f.outcome)
+    && (!f.outcome || s.outcome === f.outcome) && (!f.rec || s.reconstruction?.confidence === f.rec)
     && `${s.preview || ''} ${s.subject} ${s.assessment?.summary || ''} ${categoriesOf(s).join(' ')}`.toLowerCase().includes(f.search.toLowerCase()))
 }

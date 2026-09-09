@@ -7,7 +7,7 @@ import './alkosto-theme.css'
 import WorkspaceIcon from './WorkspaceIcon'
 import EvaluationDashboard from './EvaluationDashboard'
 import ReviewDesk from './ReviewDesk'
-import { criterionNames, outcomeNames } from './dashboard-model'
+import { criterionNames, outcomeNames, reconstructionNames, reconstructionNotes } from './dashboard-model'
 
 type Any = Record<string, any>
 const labels: Record<string, string> = { CIERRA: 'Cerrada', CIERRE_YALO: 'Cierre Yalo', ABIERTA: 'Sin cierre observado', INACTIVIDAD_INFERIDA: 'Separación inferida', REINICIO: 'Reinicio', CUMPLE: 'Cumple', INCUMPLE: 'Hallazgo', NO_APLICA: 'No aplica', EVIDENCIA_INSUFICIENTE: 'Sin evidencia suficiente' }
@@ -67,7 +67,7 @@ export default function Workspace() {
       <div className={"review-split " + (tab === 'evaluacion' ? 'focused-review' : '')}><div className="session-list">{sessions.length === 0 && <p className="empty">Importa un CSV de Yalo para empezar o cambia el filtro.</p>}{sessions.map((s: Any) => <button key={s.id} onClick={() => open(s.id).catch(e => setMessage(e.message))} className={detail?.id === s.id ? 'selected' : ''}><small>{date(s.start)} · {s.count} eventos</small><strong>{s.preview || 'Sin consulta de cliente visible'}</strong><span>{labels[s.boundary]}{s.rating !== null ? ` · Encuesta ${s.rating}/10` : ''}</span><em>{s.assessment ? `${s.assessment.category} · ${s.assessment.stale ? 'Reevaluación necesaria' : s.assessment.label.replaceAll('_', ' ')}` : 'Pendiente de revisión'}</em></button>)}</div>
       <article className="session-detail">{!detail ? <div className="empty"><h2>Abre una conversación</h2><p>Consulta los mensajes, su evidencia y el historial de evaluación.</p></div> : <>
         <div className="detail-heading"><div><h2>Usuario {detail.subject.slice(0, 8)}</h2><p>{labels[detail.boundary]} · {date(detail.start)}{detail.outcome ? ` · ${outcomeNames[detail.outcome]}` : ''}</p></div><button disabled={busy || !data.aiReady} onClick={() => action(async () => { await api(`/sessions/${detail.id}/evaluate`, { method: 'POST' }); await open(detail.id) }, 'Evaluación real guardada')}>Evaluar con IA</button></div>
-        {detail.incompleteStart && <p className="caution">El inicio de sesión no está confirmado. Puede faltar contexto anterior.</p>}
+        {detail.reconstruction && detail.reconstruction.confidence !== 'ALTA' && <p className="caution">Reconstrucción {reconstructionNames[detail.reconstruction.confidence].toLowerCase()}: {reconstructionNotes(detail.reconstruction).join(' · ')}</p>}
         {detail.events.some((e: Any) => e.media === 'IMAGE') && <p className="caution">Hay imágenes sin contenido visual disponible; la evaluación debe reconocer esa limitación.</p>}
 
         <section className="assessment"><h2>Evaluación comercial</h2>{!assessment ? <p>Aún no hay evaluación. Puedes revisar los mensajes y crear una solicitud manual.</p> : <>
