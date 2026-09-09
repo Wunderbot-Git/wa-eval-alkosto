@@ -68,3 +68,21 @@ variable "deploy_services" {
   type        = bool
   default     = false
 }
+
+variable "api_min_instances" {
+  description = "Minimum API instances. Must be >= 1 for scheduled jobs (daily BigQuery auto-import) to fire; 0 lets the service scale to zero."
+  type        = number
+  default     = 0
+}
+
+variable "auto_import_daily" {
+  description = "Import yesterday's conversations from BigQuery every day at 06:00 Colombia time (requires api_min_instances >= 1 and BigQuery access for the service account)"
+  type        = bool
+  default     = false
+}
+
+variable "bigquery_project" {
+  description = "Billing project for workspace BigQuery imports (empty = GOOGLE_CLOUD_PROJECT)"
+  type        = string
+  default     = ""
+}

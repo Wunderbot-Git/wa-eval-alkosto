@@ -142,6 +142,28 @@ main branch using `cloudbuild.yaml` with substitutions
 `_REGION` and `_BACKEND_URL` (values from step 2). Every push then builds both
 images, runs migrations, and rolls both Cloud Run services.
 
+## Daily conversation auto-import (workspace)
+
+The review workspace can import yesterday's conversations from the shared
+BigQuery view automatically, every day at 06:00 Colombia time (it covers the
+last two days, so a failed run heals itself the next morning; imports are
+idempotent and never duplicate messages). To enable it in the deployment:
+
+1. In `terraform.tfvars`: `auto_import_daily = true`, `api_min_instances = 1`
+   (a scale-to-zero service has no running process at 06:00, so the schedule
+   would never fire), and `bigquery_project` if the billing project differs
+   from `GOOGLE_CLOUD_PROJECT`.
+2. Grant the `eval-cloudrun` service account BigQuery access — this is in the
+   project that hosts the shared view (`yalo-eval-wa`), so it cannot be done
+   from this Terraform: `roles/bigquery.jobUser` on the billing project and
+   read access to the shared dataset (ask whoever administers `yalo-eval-wa`).
+3. `terraform apply`. Locally, the same feature is `AUTO_IMPORT_DAILY=true`
+   in `apps/api/.env` — the API process must be running at 06:00.
+
+The workspace UI's "Importar día anterior ahora" button runs the same
+idempotent import on demand, e.g. to backfill a missed day. Costs are capped
+per query by `maximumBytesBilled` (5 GB — a typical day is a few MB).
+
 ## Gemini configuration reference
 
 | `gemini_mode` (tfvars) | Env vars set on `eval-api` | Notes |
