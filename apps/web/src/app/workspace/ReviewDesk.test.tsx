@@ -28,7 +28,7 @@ describe('review desk evidence workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Evidencia siguiente' }))
     await waitFor(() => expect(container.querySelector('.wa-focused')?.getAttribute('data-message-id')).toBe('e4'))
     expect(HTMLElement.prototype.scrollTo).toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Todos los criterios' }))
+    fireEvent.click(screen.getByRole('button', { name: /Ver todos los criterios/ }))
     fireEvent.click(screen.getByRole('button', { name: /Exactitud de la información/ }))
     expect(container.querySelectorAll('[data-evidence="true"]')).toHaveLength(0)
     expect(screen.getByText('Este criterio no cita mensajes disponibles.')).toBeTruthy()
@@ -64,6 +64,9 @@ describe('review desk evidence workflow', () => {
   it('creates a human finding from selected chat messages', async () => {
     const api = vi.fn().mockResolvedValue(detail)
     render(<ReviewDesk sessions={sessions} selectedId="s1" onSelect={() => {}} api={api} onRefresh={async () => {}} />)
+    // Message checkboxes only appear once observation mode is activated.
+    expect(screen.queryByRole('checkbox', { name: 'Seleccionar mensaje 1' })).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: /Añadir hallazgo u observación/ }))
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Seleccionar mensaje 1' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar mensaje 2' }))
     fireEvent.change(screen.getByLabelText('Tu observación'), { target: { value: 'La recomendación supera el presupuesto.' } })
