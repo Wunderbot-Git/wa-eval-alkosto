@@ -2,7 +2,8 @@ import { reviewAction, reviewState } from './human-review'
 import { ConflictException, BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { Event, hash, parseEvents, redact, sessionsFromEvents } from './events'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
+import { resolveGeminiMode } from '../judges/gemini/gemini-client.service'
 import { cloudRequest, queryMessages } from './google-cloud'
 
 const RUBRIC_VERSION = 'pilot-2'
@@ -57,7 +58,7 @@ export class WorkspaceService {
       const a = assessments.find(a => a.sessionId === s.id)
       return { ...s, events: undefined, count: s.events.length, preview: s.events.find(e => e.kind === 'customer')?.text.slice(0, 140),
         assessment: a ? { ...(a.payload as any).verdict, id: a.id, createdAt: a.createdAt, humanReview: reviewState((a.payload as any).humanReview || []), review: ((a.payload as any).reviews || []).at(-1) || null, categories: [...new Set(((a.payload as any).extraction?.episodes || []).map((e: any) => e.category).filter(Boolean))], stale: a.inputHash !== s.inputHash || (a.payload as any).rubricVersion !== RUBRIC_VERSION } : null }
-    }), catalogs, issues, tests, aiReady: !!process.env.GEMINI_API_KEY || process.env.GOOGLE_AUTH_MODE === 'gcloud', cloudReady: process.env.GOOGLE_AUTH_MODE === 'gcloud', model: process.env.GEMINI_MODEL || null }
+    }), catalogs, issues, tests, aiReady: resolveGeminiMode() !== 'fake' || process.env.GOOGLE_AUTH_MODE === 'gcloud', cloudReady: process.env.GOOGLE_AUTH_MODE === 'gcloud' || !!process.env.BIGQUERY_PROJECT, model: process.env.GEMINI_MODEL || null }
   }
   async detail(id: string) {
     const session = (await this.sessions()).find(s => s.id === id)
@@ -102,21 +103,36 @@ export class WorkspaceService {
     return { id, products: products.length, verified: false }
   }
   private async generate(system: string, input: unknown, responseSchema?: any) {
-    const key = process.env.GEMINI_API_KEY; const model = process.env.GEMINI_MODEL
-    if (!key && process.env.GOOGLE_AUTH_MODE === 'gcloud' && model) {
-      const project = process.env.GOOGLE_CLOUD_PROJECT || 'yalo-eval-wa'
+    const model = process.env.GEMINI_MODEL
+    if (!model) throw new ServiceUnavailableException('Configura GEMINI_MODEL para evaluar con IA real. No se generan notas ficticias.')
+    const generationConfig = { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192, ...(responseSchema ? { responseSchema } : {}) }
+    // Local-only path: reuse the interactive gcloud session (never deployed).
+    if (process.env.GOOGLE_AUTH_MODE === 'gcloud' && !process.env.GEMINI_API_KEY && process.env.GEMINI_USE_VERTEX !== 'true') {
+      const project = process.env.GOOGLE_CLOUD_PROJECT
+      if (!project) throw new ServiceUnavailableException('Configura GOOGLE_CLOUD_PROJECT para usar Vertex AI')
       const response = await cloudRequest(`https://aiplatform.googleapis.com/v1/projects/${encodeURIComponent(project)}/locations/global/publishers/google/models/${encodeURIComponent(model)}:generateContent`, {
         systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify(input) }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192, ...(responseSchema ? { responseSchema } : {}) },
+        generationConfig,
       })
       const text = response.candidates?.[0]?.content?.parts?.filter((p: any) => !p.thought).map((p: any) => p.text || '').join('')
       if (!text) throw new Error('Vertex AI no devolvió una respuesta evaluable')
       return { value: JSON.parse(text), usage: response.usageMetadata }
     }
-    if (!key || !model) throw new ServiceUnavailableException('Configura GEMINI_API_KEY y GEMINI_MODEL para evaluar con IA real. No se generan notas ficticias.')
-    const client = new GoogleGenerativeAI(key).getGenerativeModel({ model })
-    const response = await client.generateContent({ systemInstruction: system, contents: [{ role: 'user', parts: [{ text: JSON.stringify(input) }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192, ...(responseSchema ? { responseSchema } : {}) } }, { timeout: 90000 })
-    return { value: JSON.parse(response.response.text()), usage: response.response.usageMetadata }
+    // Deployable path: unified @google/genai SDK — Vertex AI via Application
+    // Default Credentials (service account) or the public API with a key.
+    const mode = resolveGeminiMode()
+    if (mode === 'fake') throw new ServiceUnavailableException('Configura GEMINI_USE_VERTEX o GEMINI_API_KEY para evaluar con IA real. No se generan notas ficticias.')
+    if (mode === 'vertex' && !process.env.GOOGLE_CLOUD_PROJECT) throw new ServiceUnavailableException('Configura GOOGLE_CLOUD_PROJECT para usar Vertex AI')
+    const client = mode === 'vertex'
+      ? new GoogleGenAI({ vertexai: true, project: process.env.GOOGLE_CLOUD_PROJECT, location: process.env.GOOGLE_CLOUD_LOCATION || 'global' })
+      : new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+    const response = await client.models.generateContent({
+      model, contents: [{ role: 'user', parts: [{ text: JSON.stringify(input) }] }],
+      config: { systemInstruction: system, abortSignal: AbortSignal.timeout(120000), ...generationConfig },
+    })
+    const text = response.text
+    if (!text) throw new Error('Gemini no devolvió una respuesta evaluable')
+    return { value: JSON.parse(text), usage: response.usageMetadata }
   }
   async evaluate(id: string) {
     if (this.busy.has(id)) throw new BadRequestException('Esta conversación ya se está evaluando')

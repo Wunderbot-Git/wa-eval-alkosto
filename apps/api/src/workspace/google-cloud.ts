@@ -1,16 +1,33 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { GoogleAuth } from 'google-auth-library'
 const exec = promisify(execFile)
 let cached: { token: string; expires: number } | undefined
-export async function cloudRequest(path: string, body?: unknown) {
-  if (process.env.GOOGLE_AUTH_MODE !== 'gcloud') throw new Error('Configura GOOGLE_AUTH_MODE=gcloud para usar tu sesión local')
-  if (!cached || cached.expires < Date.now()) {
-    try {
-      const result = await exec('gcloud', ['auth', 'print-access-token'], { timeout: 30000 })
-      cached = { token: result.stdout.trim(), expires: Date.now() + 40 * 60 * 1000 }
-    } catch { throw new Error('Renueva tu acceso local con gcloud auth login') }
+let adc: GoogleAuth | undefined
+
+// Access token for Google Cloud REST calls (BigQuery, local Vertex path).
+// GOOGLE_AUTH_MODE=gcloud reuses the interactive gcloud session (LOCAL ONLY);
+// otherwise Application Default Credentials (service account on Cloud Run,
+// `gcloud auth application-default login` locally).
+async function accessToken(): Promise<string> {
+  if (process.env.GOOGLE_AUTH_MODE === 'gcloud') {
+    if (!cached || cached.expires < Date.now()) {
+      try {
+        const result = await exec('gcloud', ['auth', 'print-access-token'], { timeout: 30000 })
+        cached = { token: result.stdout.trim(), expires: Date.now() + 40 * 60 * 1000 }
+      } catch { throw new Error('Renueva tu acceso local con gcloud auth login') }
+    }
+    return cached.token
   }
-  const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers: { Authorization: `Bearer ${cached.token}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(120000) })
+  adc ??= new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] })
+  const token = await (await adc.getClient()).getAccessToken()
+  if (!token.token) throw new Error('No hay credenciales de Google Cloud (Application Default Credentials)')
+  return token.token
+}
+
+export async function cloudRequest(path: string, body?: unknown) {
+  const token = await accessToken()
+  const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(120000) })
   const value = await response.json() as any
   if (!response.ok) {
     if (response.status === 401) cached = undefined
@@ -22,8 +39,8 @@ export async function cloudRequest(path: string, body?: unknown) {
 export async function queryMessages(from: string, to: string, options: { dryRun?: boolean; maxBytes?: number } = {}) {
   const start = new Date(from); const end = new Date(to)
   if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start || end.getTime() - start.getTime() > 7 * 86400000) throw new Error('Selecciona un intervalo válido de hasta siete días')
-  const project = process.env.GOOGLE_CLOUD_PROJECT || 'yalo-eval-wa'
-  if (!/^[a-z][a-z0-9-]+$/.test(project)) throw new Error('Proyecto inválido')
+  const project = process.env.BIGQUERY_PROJECT || process.env.GOOGLE_CLOUD_PROJECT
+  if (!project || !/^[a-z][a-z0-9-]+$/.test(project)) throw new Error('Configura BIGQUERY_PROJECT o GOOGLE_CLOUD_PROJECT para consultar BigQuery')
   const endpoint = `https://bigquery.googleapis.com/bigquery/v2/projects/${project}`
   const maxBytes = options.maxBytes ?? 5000000000
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 65000000000) throw new Error('Límite de consulta inválido; máximo 65 GB')

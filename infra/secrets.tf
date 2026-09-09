@@ -38,6 +38,19 @@ resource "google_secret_manager_secret_version" "session_secret" {
   secret_data = var.session_secret
 }
 
+resource "google_secret_manager_secret" "pseudonym_secret" {
+  secret_id = "pseudonym-secret"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "pseudonym_secret" {
+  secret      = google_secret_manager_secret.pseudonym_secret.id
+  secret_data = var.pseudonym_secret
+}
+
 resource "google_secret_manager_secret" "gemini_api_key" {
   secret_id = "gemini-api-key"
   replication {

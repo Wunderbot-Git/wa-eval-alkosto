@@ -32,6 +32,7 @@ locals {
     google_secret_manager_secret.database_url.id,
     google_secret_manager_secret.redis_url.id,
     google_secret_manager_secret.session_secret.id,
+    google_secret_manager_secret.pseudonym_secret.id,
     google_secret_manager_secret.gemini_api_key.id,
   ]
 }

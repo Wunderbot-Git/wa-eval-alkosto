@@ -73,6 +73,16 @@ resource "google_cloud_run_v2_service" "api" {
         }
       }
 
+      env {
+        name = "PSEUDONYM_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.pseudonym_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+
       # Gemini access — exactly one mode is active (see var.gemini_mode).
       dynamic "env" {
         for_each = var.gemini_mode == "api_key" ? [1] : []

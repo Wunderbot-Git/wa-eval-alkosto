@@ -34,5 +34,8 @@ WORKDIR /app/apps/api
 EXPOSE 3001
 ENV NODE_ENV=production
 ENV API_PORT=3001
+# The API binds to loopback by default (local safety); containers must listen
+# on all interfaces for Cloud Run health checks and traffic.
+ENV API_HOST=0.0.0.0
 
 CMD ["node", "dist/main"]

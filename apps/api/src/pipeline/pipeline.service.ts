@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { EvaluationQueueService } from '../queue/evaluation-queue.service'
+import { resolveGeminiMode } from '../judges/gemini/gemini-client.service'
 
 @Injectable()
 export class PipelineService {
@@ -10,8 +11,8 @@ export class PipelineService {
   ) {}
 
   async launchRun(runId: string) {
-    if (process.env.NODE_ENV !== 'test' && !process.env.GEMINI_API_KEY && process.env.EVALUATION_MODE !== 'demo') {
-      throw new BadRequestException('El evaluador anterior requiere Gemini. Utiliza Revisión V1 para Vertex AI; no se generan evaluaciones ficticias.')
+    if (process.env.NODE_ENV !== 'test' && resolveGeminiMode() === 'fake' && process.env.EVALUATION_MODE !== 'demo') {
+      throw new BadRequestException('El evaluador anterior requiere Gemini (API key o Vertex AI); no se generan evaluaciones ficticias.')
     }
     const run = await this.prisma.run.findUnique({ where: { id: runId } })
     if (!run) {

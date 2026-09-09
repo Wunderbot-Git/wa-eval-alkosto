@@ -2,6 +2,9 @@ project_id     = "autogestion-alkosto"
 region         = "us-central1" # us-east1 (South Carolina) has slightly lower latency to Colombia
 db_password    = "CHANGE_ME_strong_password_here"
 session_secret = "CHANGE_ME_random_64_char_string"
+# HMAC secret for pseudonymous user IDs in the review workspace.
+# Must stay stable across imports of the same dataset — never rotate casually.
+pseudonym_secret = "CHANGE_ME_random_64_char_string"
 
 # How the LLM judges reach Gemini:
 #   "vertex"  — via Vertex AI in this GCP project (no API key, recommended for the Alkosto environment)

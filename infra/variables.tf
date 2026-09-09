@@ -28,6 +28,12 @@ variable "session_secret" {
   sensitive   = true
 }
 
+variable "pseudonym_secret" {
+  description = "Stable HMAC secret for pseudonymous user identifiers in the review workspace. Never rotate between imports of the same dataset."
+  type        = string
+  sensitive   = true
+}
+
 variable "gemini_mode" {
   description = "How judges reach Gemini: 'vertex' (Vertex AI via service account, no key), 'api_key' (Gemini API key from Secret Manager), or 'fake' (deterministic fake judges)"
   type        = string
@@ -41,7 +47,7 @@ variable "gemini_mode" {
 variable "gemini_model" {
   description = "Gemini model name used by the judges"
   type        = string
-  default     = "gemini-2.0-flash"
+  default     = "gemini-2.5-flash"
 }
 
 variable "vertex_location" {
