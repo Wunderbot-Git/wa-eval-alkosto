@@ -62,6 +62,20 @@ describe('review workflow invariants', () => {
     await expect(service.executeTest('t', { result: 'PASA', response: '', version: '' }, 'reviewer')).rejects.toThrow()
     expect(update).not.toHaveBeenCalled()
   })
+  it('refuses to evaluate a conversation ending at the data edge', async () => {
+    const { sessionsFromEvents } = await import('./events')
+    const events = [
+      { id: 'e1', subject: 'u1', at: '2026-09-08T23:00:00Z', kind: 'customer', text: 'busco un televisor', media: 'TEXT' },
+      { id: 'e2', subject: 'u1', at: '2026-09-08T23:01:00Z', kind: 'agent', text: '¿de qué tamaño?', media: 'TEXT' },
+    ]
+    const [session] = sessionsFromEvents(events as any)
+    expect(session.reconstruction?.endReason).toBe('BORDE_DE_DATOS')
+    const db = {
+      reviewEvent: { findMany: async () => events.map(e => ({ payload: e })) },
+      reviewAssessment: { findMany: async () => [] },
+    }
+    await expect(new WorkspaceService(db as any).evaluate(session.id)).rejects.toThrow('podría continuar')
+  })
   it('does not silently rewrite an existing imported message', async () => {
     process.env.PSEUDONYM_SECRET = 'test-secret'
     const csv = 'user_id;is_user_message;event_timestamp;message_id;message_text;message_type\nu1;true;2026-08-31T00:00:00Z;m1;Hola;TEXT'

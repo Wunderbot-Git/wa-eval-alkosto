@@ -154,6 +154,14 @@ export class WorkspaceService {
     this.busy.add(id)
     try {
       const session = await this.detail(id)
+      // A conversation ending near the edge of the imported data (e.g. 23:00
+      // when the import stops at midnight) may continue after the cutoff.
+      // Evaluating it now would judge half a conversation; the next day's
+      // import either extends it (same session, deduplicated) or confirms
+      // the silence — then it becomes evaluable.
+      if (session.reconstruction?.endReason === 'BORDE_DE_DATOS') {
+        throw new BadRequestException('Esta conversación termina cerca del final de los datos importados y podría continuar después. Importa el día siguiente antes de evaluarla.')
+      }
       const originalTranscript = session.events.filter(e => ['customer', 'agent'].includes(e.kind))
       const eventIdMap = Object.fromEntries(originalTranscript.map((e, i) => [`e${i + 1}`, e.id]))
       const transcript = originalTranscript.map((e, i) => ({ ...e, id: `e${i + 1}` }))
