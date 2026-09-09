@@ -7,7 +7,7 @@ const statuses: Record<string, string> = { INCUMPLE: 'Hallazgo', CUMPLE: 'Cumple
 const timestamp = (v: string) => new Date(v).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })
 const shortDate = (v: string) => new Date(v).toLocaleString('es-CO', { timeZone: 'America/Bogota', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 const day = (v: string) => new Date(v).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'long', year: 'numeric' })
-export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefresh }: { sessions: Row[]; selectedId: string; onSelect: (id: string) => void; api: (path: string, options?: RequestInit) => Promise<any>; onRefresh: () => Promise<void> }) {
+export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefresh, aiReady }: { sessions: Row[]; selectedId: string; onSelect: (id: string) => void; api: (path: string, options?: RequestInit) => Promise<any>; onRefresh: () => Promise<void>; aiReady?: boolean }) {
   const [humanEvidence, setHumanEvidence] = useState<string[]>([])
   const [selectedMessages, setSelectedMessages] = useState<string[]>([])
   const [selecting, setSelecting] = useState(false)
@@ -100,6 +100,9 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
     <div className="desk-mobile-tabs"><button aria-pressed={mobile === 'findings'} onClick={() => setMobile('findings')}>Evaluación y hallazgos</button><button aria-pressed={mobile === 'chat'} onClick={() => setMobile('chat')}>Conversación</button></div>
     <div className={'desk-panels mobile-' + mobile}>
       <section className="desk-evaluation" aria-label="Evaluación y hallazgos">
+      {(!assessment || stale) && (detail.reconstruction?.endReason === 'BORDE_DE_DATOS'
+        ? <p className="caution">Esta conversación termina cerca del final de los datos importados y podría continuar después. Se podrá evaluar tras importar el día siguiente.</p>
+        : <button className="desk-evaluate" disabled={busy || !aiReady} onClick={() => save(`/sessions/${activeId}/evaluate`, {}, 'Evaluación real guardada')}>{assessment ? 'Reevaluar con IA' : 'Evaluar con IA'}</button>)}
       {!assessment ? <p className="desk-context">Esta conversación todavía no tiene una evaluación. Puedes leer el chat completo a la derecha.</p> : <>
         {stale && <p className="caution">Evaluación obsoleta. No la uses como resultado vigente: cambiaron los mensajes o la rúbrica.</p>}
         <div className="desk-overview">

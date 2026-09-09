@@ -43,6 +43,13 @@ describe('review desk evidence workflow', () => {
     await waitFor(() => expect(refresh).toHaveBeenCalled())
     expect(api.mock.calls.some(([path]) => path.endsWith('/evaluate'))).toBe(false)
   })
+  it('offers evaluation inside the overlay for unevaluated conversations', async () => {
+    const unevaluated = { ...detail, assessments: [] }
+    const api = vi.fn().mockImplementation(async (path: string, options?: RequestInit) => options?.method === 'POST' ? {} : unevaluated)
+    render(<ReviewDesk sessions={sessions} selectedId="s1" onSelect={() => {}} api={api} onRefresh={async () => {}} aiReady />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Evaluar con IA' }))
+    await waitFor(() => expect(api).toHaveBeenCalledWith('/sessions/s1/evaluate', expect.objectContaining({ method: 'POST' })))
+  })
   it('clears evidence selection when switching to another conversation', async () => {
     const second = { ...detail, id: 's2', subject: 'another456', assessments: [] }
     const api = vi.fn().mockImplementation(async (path: string) => path.endsWith('s2') ? second : detail)

@@ -29,3 +29,4 @@
 .desk-overlay .desk-panels{flex:1;min-height:0}
 .desk-overlay .desk-evaluation,.desk-overlay .desk-chat{height:calc(100vh - 88px);min-height:0;max-height:none}
 @media(max-width:850px){.desk-overlay .desk-evaluation,.desk-overlay .desk-chat{height:calc(100vh - 140px)}}
+.review-main .desk-evaluate{width:100%;background:#004797;color:#fff;border:0;border-radius:8px;min-height:42px;font-size:14px;margin-bottom:12px}.review-main .desk-evaluate:disabled{opacity:.45}
