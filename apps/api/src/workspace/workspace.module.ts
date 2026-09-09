@@ -1,6 +1,7 @@
 import { Module, Controller, Get, Post, Patch, Param, Body, Req, UploadedFile, UseInterceptors, UseGuards, BadRequestException } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { WorkspaceService } from './workspace.service'
+import { WorkspaceCronService } from './workspace-cron.service'
 import { AuthModule } from '../auth/auth.module'
 import { AuthGuard } from '../auth/auth.guard'
 import { RolesGuard } from '../auth/roles.guard'
@@ -13,6 +14,7 @@ class WorkspaceController {
   constructor(private readonly service: WorkspaceService) {}
   @Get() overview() { return this.service.overview() }
   @Post('bigquery') bigquery(@Body() body: any) { return this.service.importBigQuery(body) }
+  @Post('bigquery/daily') daily() { return this.service.importPreviousDay() }
   @Post('bigquery/preview') preview(@Body() body: any) { return this.service.previewBigQuery(body) }
   @Get('sessions/:id') detail(@Param('id') id: string) { return this.service.detail(id) }
   @Post('import') @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
@@ -28,5 +30,5 @@ class WorkspaceController {
   @Post('tests') test(@Body() body: any) { return this.service.createTest(body) }
   @Post('tests/:id/executions') execute(@Param('id') id: string, @Body() body: any, @Req() req: any) { return this.service.executeTest(id, body, req.user.id) }
 }
-@Module({ imports: [AuthModule], controllers: [WorkspaceController], providers: [WorkspaceService] })
+@Module({ imports: [AuthModule], controllers: [WorkspaceController], providers: [WorkspaceService, WorkspaceCronService] })
 export class WorkspaceModule {}

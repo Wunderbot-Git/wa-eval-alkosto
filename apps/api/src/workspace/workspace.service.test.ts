@@ -1,6 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
-import { WorkspaceService } from './workspace.service'
+import { WorkspaceService, previousDayWindow } from './workspace.service'
 import { hash } from './events'
+
+describe('previousDayWindow', () => {
+  it('covers yesterday 00:00 to today 00:00 in Bogota time', () => {
+    // 2026-09-09 09:00 in Bogota (14:00 UTC)
+    expect(previousDayWindow(new Date('2026-09-09T14:00:00Z'))).toEqual({ from: '2026-09-08T05:00:00.000Z', to: '2026-09-09T05:00:00.000Z' })
+  })
+  it('uses the Bogota calendar day around midnight UTC', () => {
+    // 2026-09-08 22:00 in Bogota is already 2026-09-09 03:00 UTC
+    expect(previousDayWindow(new Date('2026-09-09T03:00:00Z'))).toEqual({ from: '2026-09-07T05:00:00.000Z', to: '2026-09-08T05:00:00.000Z' })
+  })
+  it('extends the window backwards for self-healing multi-day imports', () => {
+    expect(previousDayWindow(new Date('2026-09-09T14:00:00Z'), 2)).toEqual({ from: '2026-09-07T05:00:00.000Z', to: '2026-09-09T05:00:00.000Z' })
+  })
+})
 
 describe('review workflow invariants', () => {
   it('hashes JSONB objects independent of key order', () => {

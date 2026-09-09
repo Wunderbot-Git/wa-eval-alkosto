@@ -20,7 +20,7 @@ resource "google_cloud_run_v2_service" "api" {
     service_account = google_service_account.cloudrun.email
 
     scaling {
-      min_instance_count = 0
+      min_instance_count = var.api_min_instances
       max_instance_count = 3
     }
 
@@ -139,6 +139,19 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "WORKER_CONCURRENCY"
         value = "5"
+      }
+
+      env {
+        name  = "AUTO_IMPORT_DAILY"
+        value = var.auto_import_daily ? "true" : "false"
+      }
+
+      dynamic "env" {
+        for_each = var.bigquery_project != "" ? [1] : []
+        content {
+          name  = "BIGQUERY_PROJECT"
+          value = var.bigquery_project
+        }
       }
 
       env {
