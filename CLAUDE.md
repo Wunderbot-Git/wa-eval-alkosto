@@ -13,7 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Backend:** NestJS 11 + TypeScript (CommonJS)
 - **Database:** PostgreSQL 16 + Prisma 7 (PrismaPg adapter)
 - **Async Jobs:** BullMQ + Redis
-- **LLM:** Gemini 2.0 Flash (via `@google/generative-ai`), falls back to fake judges when no API key
+- **LLM:** Gemini 2.0 Flash (via `@google/genai`) — Vertex AI (`GEMINI_USE_VERTEX=true`) or API key (`GEMINI_API_KEY`); fake judges when neither is set
+- **Deployment:** GCP project `autogestion-alkosto` — Cloud Run + Cloud SQL + Memorystore, Terraform in `infra/`, see `DEPLOYMENT.md`
 - **Testing:** Vitest (unit), Playwright (E2E)
 - **Security:** helmet, @nestjs/throttler, class-validator, pino structured logging
 

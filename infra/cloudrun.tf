@@ -1,6 +1,13 @@
+data "google_project" "project" {}
+
 locals {
   api_image = "${var.region}-docker.pkg.dev/${var.project_id}/eval-images/eval-api:latest"
   web_image = "${var.region}-docker.pkg.dev/${var.project_id}/eval-images/eval-web:latest"
+
+  # Deterministic Cloud Run URLs (service-PROJECT_NUMBER.REGION.run.app) so the
+  # API can reference the web URL without a dependency cycle between services.
+  api_url = "https://eval-api-${data.google_project.project.number}.${var.region}.run.app"
+  web_url = "https://eval-web-${data.google_project.project.number}.${var.region}.run.app"
 }
 
 # API Cloud Run service
@@ -67,13 +74,56 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
-        name = "GEMINI_API_KEY"
+        name = "PSEUDONYM_SECRET"
         value_source {
           secret_key_ref {
-            secret  = google_secret_manager_secret.gemini_api_key.secret_id
+            secret  = google_secret_manager_secret.pseudonym_secret.secret_id
             version = "latest"
           }
         }
+      }
+
+      # Gemini access — exactly one mode is active (see var.gemini_mode).
+      dynamic "env" {
+        for_each = var.gemini_mode == "api_key" ? [1] : []
+        content {
+          name = "GEMINI_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.gemini_api_key.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      dynamic "env" {
+        for_each = var.gemini_mode == "vertex" ? [1] : []
+        content {
+          name  = "GEMINI_USE_VERTEX"
+          value = "true"
+        }
+      }
+
+      dynamic "env" {
+        for_each = var.gemini_mode == "vertex" ? [1] : []
+        content {
+          name  = "GOOGLE_CLOUD_PROJECT"
+          value = var.project_id
+        }
+      }
+
+      dynamic "env" {
+        for_each = var.gemini_mode == "vertex" ? [1] : []
+        content {
+          name  = "GOOGLE_CLOUD_LOCATION"
+          value = var.vertex_location
+        }
+      }
+
+      env {
+        name  = "GEMINI_MODEL"
+        value = var.gemini_model
       }
 
       env {
@@ -89,6 +139,16 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "WORKER_CONCURRENCY"
         value = "5"
+      }
+
+      env {
+        name  = "APP_URL"
+        value = local.web_url
+      }
+
+      env {
+        name  = "CORS_ORIGIN"
+        value = local.web_url
       }
     }
   }
@@ -127,9 +187,11 @@ resource "google_cloud_run_v2_service" "web" {
         }
       }
 
+      # The API URL is baked into the web build via the BACKEND_URL build arg
+      # (see cloudbuild.yaml); this runtime env only documents the wiring.
       env {
-        name  = "NEXT_PUBLIC_API_URL"
-        value = var.deploy_services ? google_cloud_run_v2_service.api[0].uri : ""
+        name  = "BACKEND_URL"
+        value = local.api_url
       }
     }
   }

@@ -17,7 +17,7 @@ RUN cd packages/shared && pnpm run build
 
 # Build Next.js (API calls go through same-origin /api rewrite)
 ENV NEXT_TELEMETRY_DISABLED=1
-ARG BACKEND_URL=https://eval-api-545953473121.us-central1.run.app
+ARG BACKEND_URL=http://localhost:3001
 ENV BACKEND_URL=$BACKEND_URL
 RUN cd apps/web && pnpm run build
 

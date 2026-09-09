@@ -11,7 +11,8 @@ steps:
       - 'apps/api/Dockerfile'
       - '.'
 
-  # Build Web image
+  # Build Web image. BACKEND_URL is baked into the Next.js build (rewrites),
+  # so it must point at the deployed API service URL for this project.
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -19,6 +20,8 @@ steps:
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:${SHORT_SHA}'
       - '-t'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/eval-images/eval-web:latest'
+      - '--build-arg'
+      - 'BACKEND_URL=${_BACKEND_URL}'
       - '-f'
       - 'apps/web/Dockerfile'
       - '.'
@@ -86,6 +89,9 @@ steps:
 
 substitutions:
   _REGION: us-central1
+  # API service URL for this project: https://eval-api-PROJECT_NUMBER.REGION.run.app
+  # (also shown by `terraform output api_url`). Override via trigger substitution.
+  _BACKEND_URL: http://localhost:3001
 
 # DATABASE_URL is consumed by the eval-migrate Cloud Run Job via --set-secrets,
 # not by Cloud Build itself, so no availableSecrets block is required here.

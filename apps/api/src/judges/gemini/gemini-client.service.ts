@@ -1,20 +1,47 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
+
+export type GeminiMode = 'vertex' | 'api_key' | 'fake'
+
+/**
+ * Resolve how the judges reach Gemini:
+ * - GEMINI_USE_VERTEX=true → Vertex AI in the GCP project (auth via service
+ *   account / Application Default Credentials, no API key needed)
+ * - GEMINI_API_KEY set     → public Gemini API
+ * - neither                → fake judges
+ */
+export function resolveGeminiMode(): GeminiMode {
+  if (process.env.GEMINI_USE_VERTEX === 'true') return 'vertex'
+  if (process.env.GEMINI_API_KEY) return 'api_key'
+  return 'fake'
+}
 
 @Injectable()
 export class GeminiClientService {
   private readonly logger = new Logger(GeminiClientService.name)
-  private readonly model: GenerativeModel
+  private readonly ai: GoogleGenAI
+  private readonly modelName: string
 
   constructor() {
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is required for GeminiClientService')
+    this.modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+    const mode = resolveGeminiMode()
+
+    if (mode === 'vertex') {
+      const project = process.env.GOOGLE_CLOUD_PROJECT
+      if (!project) {
+        throw new Error('GOOGLE_CLOUD_PROJECT is required when GEMINI_USE_VERTEX=true')
+      }
+      const location = process.env.GOOGLE_CLOUD_LOCATION || 'global'
+      this.ai = new GoogleGenAI({ vertexai: true, project, location })
+      this.logger.log(
+        `Gemini client initialized (Vertex AI, project=${project}, location=${location}, model=${this.modelName})`,
+      )
+    } else if (mode === 'api_key') {
+      this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+      this.logger.log(`Gemini client initialized (API key, model=${this.modelName})`)
+    } else {
+      throw new Error('GeminiClientService requires GEMINI_API_KEY or GEMINI_USE_VERTEX=true')
     }
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
-    const genAI = new GoogleGenerativeAI(apiKey)
-    this.model = genAI.getGenerativeModel({ model: modelName })
-    this.logger.log(`Gemini client initialized with model: ${modelName}`)
   }
 
   async generateJSON<T>(systemPrompt: string, userPrompt: string): Promise<T> {
@@ -23,16 +50,17 @@ export class GeminiClientService {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const result = await this.model.generateContent({
+        const response = await this.ai.models.generateContent({
+          model: this.modelName,
           contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
-          generationConfig: {
+          config: {
+            systemInstruction: systemPrompt,
             responseMimeType: 'application/json',
             maxOutputTokens: 16384,
           },
         })
 
-        const text = result.response.text()
+        const text = response.text ?? ''
         try {
           return JSON.parse(text) as T
         } catch {

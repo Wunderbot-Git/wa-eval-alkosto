@@ -1,5 +1,21 @@
-project_id     = "wa-eval-alkosto"
-region         = "us-central1"
+project_id     = "autogestion-alkosto"
+region         = "us-central1" # us-east1 (South Carolina) has slightly lower latency to Colombia
 db_password    = "CHANGE_ME_strong_password_here"
 session_secret = "CHANGE_ME_random_64_char_string"
-gemini_api_key = ""  # Leave empty for fake judges, or set your Gemini API key
+# HMAC secret for pseudonymous user IDs in the review workspace.
+# Must stay stable across imports of the same dataset — never rotate casually.
+pseudonym_secret = "CHANGE_ME_random_64_char_string"
+
+# How the LLM judges reach Gemini:
+#   "vertex"  — via Vertex AI in this GCP project (no API key, recommended for the Alkosto environment)
+#   "api_key" — via the public Gemini API (requires gemini_api_key below)
+#   "fake"    — deterministic fake judges (no LLM calls)
+gemini_mode     = "vertex"
+gemini_model    = "gemini-2.0-flash"
+vertex_location = "global" # or a region like "us-central1" if org policy forbids the global endpoint
+
+# Only needed when gemini_mode = "api_key"
+gemini_api_key = ""
+
+# Set to true after the first Cloud Build has pushed images to Artifact Registry
+deploy_services = false

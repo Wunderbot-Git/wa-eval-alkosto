@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { GeminiClientService } from './gemini-client.service'
+import { GeminiClientService, resolveGeminiMode } from './gemini-client.service'
 import { GeminiIntegrityJudge } from './gemini-integrity.judge'
 import { GeminiQualityJudge } from './gemini-quality.judge'
 import { GeminiPatternJudge } from './gemini-pattern.judge'
@@ -34,16 +34,61 @@ function createMockClient() {
   } as any as GeminiClientService & { generateJSON: ReturnType<typeof vi.fn> }
 }
 
+describe('resolveGeminiMode', () => {
+  const originalEnv = process.env
+
+  beforeEach(() => {
+    process.env = { ...originalEnv }
+    delete process.env.GEMINI_API_KEY
+    delete process.env.GEMINI_USE_VERTEX
+  })
+
+  it('returns fake when nothing is configured', () => {
+    expect(resolveGeminiMode()).toBe('fake')
+  })
+
+  it('returns api_key when GEMINI_API_KEY is set', () => {
+    process.env.GEMINI_API_KEY = 'test-key'
+    expect(resolveGeminiMode()).toBe('api_key')
+  })
+
+  it('returns vertex when GEMINI_USE_VERTEX=true, even with an API key set', () => {
+    process.env.GEMINI_API_KEY = 'test-key'
+    process.env.GEMINI_USE_VERTEX = 'true'
+    expect(resolveGeminiMode()).toBe('vertex')
+  })
+})
+
 describe('GeminiClientService', () => {
   const originalEnv = process.env
 
   beforeEach(() => {
     process.env = { ...originalEnv }
+    delete process.env.GEMINI_API_KEY
+    delete process.env.GEMINI_USE_VERTEX
+    delete process.env.GOOGLE_CLOUD_PROJECT
   })
 
-  it('should throw if GEMINI_API_KEY is missing', () => {
-    delete process.env.GEMINI_API_KEY
-    expect(() => new GeminiClientService()).toThrow('GEMINI_API_KEY is required')
+  it('should throw if neither GEMINI_API_KEY nor GEMINI_USE_VERTEX is set', () => {
+    expect(() => new GeminiClientService()).toThrow(
+      'GeminiClientService requires GEMINI_API_KEY or GEMINI_USE_VERTEX=true',
+    )
+  })
+
+  it('should throw in vertex mode without GOOGLE_CLOUD_PROJECT', () => {
+    process.env.GEMINI_USE_VERTEX = 'true'
+    expect(() => new GeminiClientService()).toThrow('GOOGLE_CLOUD_PROJECT is required')
+  })
+
+  it('should construct in vertex mode with GOOGLE_CLOUD_PROJECT set', () => {
+    process.env.GEMINI_USE_VERTEX = 'true'
+    process.env.GOOGLE_CLOUD_PROJECT = 'autogestion-alkosto'
+    expect(() => new GeminiClientService()).not.toThrow()
+  })
+
+  it('should construct in api_key mode', () => {
+    process.env.GEMINI_API_KEY = 'test-key'
+    expect(() => new GeminiClientService()).not.toThrow()
   })
 })
 
