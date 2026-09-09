@@ -43,7 +43,9 @@ El smoke requiere los dos repositorios vecinos y `yalo_export.csv`, no versionad
 
 ## Límites conocidos y siguiente iteración
 
-El dry-run de la vista compartida devuelve una estimación `UPPER_BOUND`: 65,62 GB para un día con texto y payload, 54,65 GB sin payload y 31,92 GB para COUNT. Esto no acredita tamaño real diario ni consumo facturado. Los filtros por `event_date` y timestamp no resuelven la estimación. La definición y las tablas base no están visibles en los metadatos recibidos. No se ha elevado silenciosamente el límite: la interfaz estima antes de pedir importar con máximo 5 GB; consultas mayores quedan bloqueadas. Se recomienda pedir a Yalo una vista que permita reducción por partición o una extracción incremental optimizada.
+El dry-run de la vista compartida devuelve una estimación `UPPER_BOUND`: 65,62 GB para un día con texto y payload, 54,65 GB sin payload y 31,92 GB para COUNT. Esto no acredita tamaño real diario ni consumo facturado. La definición y las tablas base no están visibles en los metadatos recibidos.
+
+Actualización 2026-09-09: ejecutar la misma selección con filtro literal `event_date` en la consola de BigQuery procesó solo unos MB para un día — la estimación era el límite superior sin poda de particiones, no el coste real. La consulta de la aplicación usa ahora filtros literales (valores de fechas validadas) en lugar de parámetros, y la importación ya no se bloquea por la estimación: el tope de 5 GB se aplica al ejecutar mediante `maximumBytesBilled` — si la consulta lo superara, BigQuery la cancela sin coste. La interfaz muestra los bytes realmente procesados tras cada importación. Sigue siendo razonable pedir a Yalo una vista con mejor poda por partición o una extracción incremental optimizada.
 
 También existe `vw_custom_agents_fct_sequential` con `session_id`, `session_start_time`, `session_end_time`, `main_argument`, `info`, `body` y contadores de herramientas. Solo se revisó su esquema. No afirmar que estas sesiones equivalen a las conversaciones de atención hasta validar semántica/cobertura.
 

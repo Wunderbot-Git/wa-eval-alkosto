@@ -85,7 +85,7 @@ export class WorkspaceService {
     return { added: result.count, duplicates: events.length - result.count, sessions: (await this.sessions()).length }
   }
   async importBigQuery(body: any) {
-    try { const result = await queryMessages(body.from, body.to, { maxBytes: 5000000000 }); return { ...await this.importCsv(Buffer.from(result.csv)), jobId: result.jobId } }
+    try { const result = await queryMessages(body.from, body.to, { maxBytes: 5000000000 }); return { ...await this.importCsv(Buffer.from(result.csv)), jobId: result.jobId, processedBytes: result.processedBytes } }
     catch (e) { throw new BadRequestException((e as Error).message) }
   }
   async previewBigQuery(body: any) {
