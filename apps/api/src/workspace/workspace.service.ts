@@ -6,7 +6,7 @@ import { GoogleGenAI } from '@google/genai'
 import { resolveGeminiMode } from '../judges/gemini/gemini-client.service'
 import { cloudRequest, queryMessages } from './google-cloud'
 
-const RUBRIC_VERSION = 'pilot-2'
+export const RUBRIC_VERSION = 'pilot-3'
 
 // The last `days` full days in America/Bogota (fixed UTC-5, no DST), ending
 // today 00:00 exclusive, as UTC instants — the same window semantics as the
@@ -25,10 +25,11 @@ No confundas ausencia de compra con fracaso. Una conversación incompleta no dem
 No hay catálogo histórico verificado: exactitud debe ser EVIDENCIA_INSUFICIENTE para afirmaciones comerciales; no declares un precio, stock o producto falso por ausencia de datos.
 Adecuación puede incumplir por una contradicción explícita de presupuesto/necesidad, pero no por supuestas especificaciones desconocidas.
 Solo los productos nombrados en transcript.text o transcript.cardsText fueron mostrados al cliente. El catálogo es metadato de procedencia, nunca prueba de lo recomendado. No infieras productos ni características ausentes. Si faltan las fichas o tarjetas, adecuacion y resolucion deben reconocer evidencia insuficiente en vez de inventar incompatibilidades. No penalices alternativas omitidas sin evidencia completa.
-Produce JSON: {summary: texto español, category: texto, criteria: [{name, status, severity: WARNING|CRITICAL|null, reason, evidenceIds: IDs exactos de eventos}]}.
+Produce JSON: {summary: texto español, category: texto, criteria: [{name, status, severity: WARNING|CRITICAL|null, reason, evidenceIds: IDs exactos de eventos}], fricciones: [{description, evidenceIds}]}.
 Devuelve exactamente un criterio por cada nombre: comprension, adecuacion, exactitud, comparacion, contexto, resolucion, comunicacion.
 Estados: CUMPLE, INCUMPLE, NO_APLICA, EVIDENCIA_INSUFICIENTE. Solo INCUMPLE lleva severidad. CRITICAL se reserva a una recomendación explícitamente incompatible que pueda conducir a una mala compra.
-Todo INCUMPLE requiere evidenceIds del transcript. Usa un resumen factual, sin puntuaciones inventadas.`
+Todo INCUMPLE requiere evidenceIds del transcript. Usa un resumen factual, sin puntuaciones inventadas.
+fricciones: limitaciones del canal o de capacidad que frustran al cliente aunque el agente no tenga la culpa (p. ej. el cliente envía o menciona fotos que el canal no procesa, mensajes duplicados del sistema, botones que no funcionan). Cada fricción requiere evidenceIds del transcript. No penalices los criterios por la limitación en sí; los criterios solo evalúan cómo el agente la maneja. Sin fricciones observadas, devuelve [].`
 
 export function validateVerdict(value: any, ids: Set<string>) {
   if (!value || typeof value.summary !== 'string' || typeof value.category !== 'string' || !Array.isArray(value.criteria) || value.criteria.length !== CRITERIA.length) throw new Error('Respuesta del evaluador incompleta')
@@ -42,6 +43,12 @@ export function validateVerdict(value: any, ids: Set<string>) {
       c.reason = 'No se dispone de publicación histórica verificada del catálogo. ' + c.reason
     }
   }
+  // Channel frictions are informational (never scored): keep only entries
+  // with a description and verifiable transcript evidence.
+  value.fricciones = (Array.isArray(value.fricciones) ? value.fricciones : [])
+    .filter((f: any) => f && typeof f.description === 'string' && f.description.trim() && Array.isArray(f.evidenceIds))
+    .map((f: any) => ({ description: f.description, evidenceIds: f.evidenceIds.filter((id: any) => typeof id === 'string' && ids.has(id)) }))
+    .filter((f: any) => f.evidenceIds.length)
   const scored = value.criteria.filter((c: any) => ['CUMPLE', 'INCUMPLE'].includes(c.status))
   const critical = scored.some((c: any) => c.severity === 'CRITICAL')
   return { ...value, score: scored.length ? Math.round(100 * scored.filter((c: any) => c.status === 'CUMPLE').length / scored.length) / 10 : null,
@@ -173,7 +180,7 @@ export class WorkspaceService {
       const input = { transcript, episodes: x.episodes, boundary: session.boundary, incompleteStart: session.incompleteStart,
         missingImages: transcript.filter(e => e.media === 'IMAGE').map(e => e.id), catalog: catalog ? { id: catalog.id, source: catalog.source, generatedAt: catalog.capturedAt, publicationVerified: false, usage: 'Solo procedencia; ningún producto de este catálogo es evidencia de una recomendación del agente' } : null }
       const responseSchema = {
-        type: 'OBJECT', required: ['summary', 'category', 'criteria'], properties: {
+        type: 'OBJECT', required: ['summary', 'category', 'criteria', 'fricciones'], properties: {
           summary: { type: 'STRING' }, category: { type: 'STRING' }, criteria: {
             type: 'ARRAY', minItems: 7, maxItems: 7, items: { type: 'OBJECT',
               required: ['name', 'status', 'severity', 'reason', 'evidenceIds'], properties: {
@@ -183,11 +190,15 @@ export class WorkspaceService {
               },
             },
           },
+          fricciones: { type: 'ARRAY', items: { type: 'OBJECT', required: ['description', 'evidenceIds'], properties: {
+            description: { type: 'STRING' }, evidenceIds: { type: 'ARRAY', items: { type: 'STRING' } },
+          } } },
         },
       }
       const judged = await this.generate(PROMPT, input, responseSchema)
       const verdict = validateVerdict(judged.value, new Set(transcript.map(e => e.id)))
       for (const criterion of verdict.criteria) criterion.evidenceIds = criterion.evidenceIds.map((ref: string) => eventIdMap[ref])
+      for (const friction of verdict.fricciones) friction.evidenceIds = friction.evidenceIds.map((ref: string) => eventIdMap[ref])
       const payload = { verdict, input, eventIdMap, extraction: x, model: process.env.GEMINI_MODEL, responseSchema, prompt: PROMPT, extractionPrompt: extractPrompt,
         rubricVersion: RUBRIC_VERSION, promptHash: hash(PROMPT), usage: [extraction.usage, judged.usage], mode: 'REAL', reviewer: null }
       return await this.db.reviewAssessment.create({ data: { sessionId: id, inputHash: session.inputHash, payload: payload as any } })

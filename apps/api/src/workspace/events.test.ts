@@ -71,6 +71,18 @@ describe('evaluator validation', () => {
     const result = validateVerdict(verdict(), new Set(['1']))
     expect(result.criteria.find((c: any) => c.name === 'exactitud').status).toBe('EVIDENCIA_INSUFICIENTE')
     expect(result.score).toBe(10); expect(result.coverage).toBe('6/7')
+    expect(result.fricciones).toEqual([])
+  })
+  it('keeps only channel frictions with verifiable evidence and never scores them', () => {
+    const value = { ...verdict(), fricciones: [
+      { description: 'El cliente envió fotos que el canal no procesa', evidenceIds: ['1', 'inventado'] },
+      { description: '', evidenceIds: ['1'] },
+      { description: 'Sin evidencia', evidenceIds: [] },
+    ] }
+    const result = validateVerdict(value, new Set(['1']))
+    expect(result.fricciones).toEqual([{ description: 'El cliente envió fotos que el canal no procesa', evidenceIds: ['1'] }])
+    expect(result.score).toBe(10)
+    expect(result.label).toBe('SIN_HALLAZGOS_OBSERVADOS')
   })
   it('rejects invented message references and incomplete output', () => {
     expect(() => validateVerdict(verdict(), new Set())).toThrow()
