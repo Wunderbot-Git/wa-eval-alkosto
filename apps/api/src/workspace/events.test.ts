@@ -30,6 +30,15 @@ describe('Yalo event ingestion', () => {
     expect(sessionsFromEvents([first, second])).toHaveLength(1)
     expect(sessionsFromEvents([first, { ...second, subject: 'two' }])).toHaveLength(2)
   })
+  it('classifies who left the conversation hanging', () => {
+    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'busco un televisor'), event('2', '12:01', 'agent', '¿Para sala o habitación?')])[0].outcome).toBe('CLIENTE_SIN_RESPUESTA')
+    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'busco un televisor')])[0].outcome).toBe('AGENTE_SIN_RESPUESTA')
+    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'gracias'), event('2', '12:01', 'agent', 'Con gusto, feliz día')])[0].outcome).toBe('FINAL_SIN_PREGUNTA')
+  })
+  it('ignores closure and survey events when classifying the outcome', () => {
+    const sessions = sessionsFromEvents([event('1', '12:00', 'customer', 'un celular'), event('2', '12:01', 'agent', '¿Qué presupuesto tienes?'), event('3', '13:30', 'closure'), event('4', '13:31', 'survey')])
+    expect(sessions[0].outcome).toBe('CLIENTE_SIN_RESPUESTA')
+  })
   it('marks inactivity and rebuilds deterministically independent of input order', () => {
     const events = [event('1', '12:00', 'customer'), event('2', '14:00', 'customer')]
     expect(sessionsFromEvents(events)).toEqual(sessionsFromEvents([...events].reverse()))

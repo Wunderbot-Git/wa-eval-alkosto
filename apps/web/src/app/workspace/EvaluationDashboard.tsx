@@ -1,10 +1,10 @@
 'use client'
 import { useState } from 'react'
 import WorkspaceIcon from './WorkspaceIcon'
-import { categoriesOf, criterionNames, filterRows, groupOf, groups, reviewNames, reviewOf, Row } from './dashboard-model'
+import { categoriesOf, criterionNames, filterRows, groupOf, groups, outcomeNames, reviewNames, reviewOf, Row } from './dashboard-model'
 
 export default function EvaluationDashboard({ sessions, onOpen }: { sessions: Row[]; onOpen: (id: string) => void }) {
-  const [filter, setFilter] = useState({ from: '', to: '', category: '', review: '', search: '' })
+  const [filter, setFilter] = useState({ from: '', to: '', category: '', review: '', outcome: '', search: '' })
   const [group, setGroup] = useState('evaluated')
   const [criterion, setCriterion] = useState('')
   const base = filterRows(sessions, filter)
@@ -21,7 +21,8 @@ export default function EvaluationDashboard({ sessions, onOpen }: { sessions: Ro
       <label>Hasta<input type="date" value={filter.to} min={filter.from || undefined} onChange={e => field('to', e.target.value)} /></label>
       <label>Categoría<select value={filter.category} onChange={e => field('category', e.target.value)}><option value="">Todas las categorías</option>{[...new Set(sessions.flatMap(categoriesOf))].sort().map(c => <option key={c}>{c}</option>)}</select></label>
       <label>Revisión humana<select value={filter.review} onChange={e => field('review', e.target.value)}><option value="">Todos los estados</option>{['pending', 'in_progress', 'reviewed', 'agreed', 'disagreed'].map(r => <option key={r} value={r}>{reviewNames[r]}</option>)}</select></label>
-      <button className="quiet-button" onClick={() => { setFilter({ from: '', to: '', category: '', review: '', search: '' }); setGroup('evaluated'); setCriterion('') }}>Restablecer</button>
+      <label>Desenlace<select value={filter.outcome} onChange={e => field('outcome', e.target.value)}><option value="">Todos los desenlaces</option>{Object.entries(outcomeNames).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+      <button className="quiet-button" onClick={() => { setFilter({ from: '', to: '', category: '', review: '', outcome: '', search: '' }); setGroup('evaluated'); setCriterion('') }}>Restablecer</button>
     </div>
     <p className="scope-note">Fechas de inicio de conversación · Colombia · {base.length} conversaciones en el filtro</p>
     <div className="dashboard-totals">
@@ -46,7 +47,7 @@ export default function EvaluationDashboard({ sessions, onOpen }: { sessions: Ro
         const a = s.assessment && !s.assessment.stale ? s.assessment : null
         const failures = a?.criteria.filter((c: Row) => c.status === 'INCUMPLE') || []
         const unknown = a?.criteria.filter((c: Row) => c.status === 'EVIDENCIA_INSUFICIENTE').length || 0
-        return <tr key={s.id}><td><small>{date(s.start)} · {s.subject.slice(0, 8)}</small><strong>{categoriesOf(s).join(' · ')}</strong><p className="row-preview">{s.preview || 'Sin consulta visible'}</p></td><td><span className={`outcome-tag ${g.tone}`}>{g.title}</span>{a && <small>{a.score == null ? 'Sin nota' : `${a.score}/10`} · Cobertura {a.coverage}</small>}</td><td>{a ? <><p>{failures.length ? failures.map((c: Row) => criterionNames[c.name] || c.name).join(' · ') : a.summary}</p>{failures.length > 0 && <small>{failures.length} hallazgos · </small>}{unknown > 0 && <small>{unknown} {unknown === 1 ? 'criterio' : 'criterios'} sin evidencia suficiente</small>}</> : <p>{s.assessment ? 'El resultado anterior necesita actualizarse.' : 'Evalúa la conversación para identificar hallazgos.'}</p>}</td><td><span className={`human-status ${reviewOf(s)}`}>{reviewNames[reviewOf(s)]}</span></td><td><button onClick={() => onOpen(s.id)}>Ver {a ? 'evaluación' : 'conversación'} ↗</button></td></tr>
+        return <tr key={s.id}><td><small>{date(s.start)} · {s.subject.slice(0, 8)}</small><strong>{categoriesOf(s).join(' · ')}</strong><p className="row-preview">{s.preview || 'Sin consulta visible'}</p>{s.outcome && <small>{outcomeNames[s.outcome]}</small>}</td><td><span className={`outcome-tag ${g.tone}`}>{g.title}</span>{a && <small>{a.score == null ? 'Sin nota' : `${a.score}/10`} · Cobertura {a.coverage}</small>}</td><td>{a ? <><p>{failures.length ? failures.map((c: Row) => criterionNames[c.name] || c.name).join(' · ') : a.summary}</p>{failures.length > 0 && <small>{failures.length} hallazgos · </small>}{unknown > 0 && <small>{unknown} {unknown === 1 ? 'criterio' : 'criterios'} sin evidencia suficiente</small>}</> : <p>{s.assessment ? 'El resultado anterior necesita actualizarse.' : 'Evalúa la conversación para identificar hallazgos.'}</p>}</td><td><span className={`human-status ${reviewOf(s)}`}>{reviewNames[reviewOf(s)]}</span></td><td><button onClick={() => onOpen(s.id)}>Ver {a ? 'evaluación' : 'conversación'} ↗</button></td></tr>
       })}</tbody></table>{!visible.length && <div className="empty"><h3>No hay casos en esta selección</h3><p>Cambia la clasificación o restablece los filtros. No se han generado datos de ejemplo.</p></div>}</div>
     </section>
   </div>

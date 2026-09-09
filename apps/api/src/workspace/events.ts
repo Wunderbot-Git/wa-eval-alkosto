@@ -4,9 +4,18 @@ export type EventKind = 'customer' | 'agent' | 'closure' | 'survey' | 'rating' |
 export interface Event {
   id: string; subject: string; at: string; kind: EventKind; text: string; media: string; cardsText?: string
 }
+// How the conversation ended — a deterministic heuristic on the last
+// commercial message, independent of the quality verdict:
+//   CLIENTE_SIN_RESPUESTA — the agent's final message asks a question the
+//     customer never answered (mid-flow abandonment)
+//   AGENTE_SIN_RESPUESTA  — the customer's final message got no agent reply
+//   FINAL_SIN_PREGUNTA    — the agent had the last word without an open question
+export type SessionOutcome = 'CLIENTE_SIN_RESPUESTA' | 'AGENTE_SIN_RESPUESTA' | 'FINAL_SIN_PREGUNTA'
+
 export interface ReviewSession {
   id: string; subject: string; start: string; end: string; boundary: string
   incompleteStart: boolean; events: Event[]; inputHash: string; rating: number | null
+  outcome: SessionOutcome | null
 }
 const canonical = (value: any): any => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' && !(value instanceof Date) ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value
 export const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex')
@@ -88,7 +97,7 @@ export function sessionsFromEvents(events: Event[]): ReviewSession[] {
     let current: ReviewSession | undefined; let pendingSurvey = false
     const start = (e: Event) => {
       current = { id: hash(['session-v1', subject, e.id]), subject, start: e.at, end: e.at,
-        boundary: 'ABIERTA', incompleteStart: true, events: [], inputHash: '', rating: null }
+        boundary: 'ABIERTA', incompleteStart: true, events: [], inputHash: '', rating: null, outcome: null }
       sessions.push(current); pendingSurvey = false
     }
     for (const original of group) {
@@ -110,6 +119,10 @@ export function sessionsFromEvents(events: Event[]): ReviewSession[] {
       current!.events.push(e); current!.end = e.at
     }
   }
-  for (const s of sessions) s.inputHash = hash({ version: 1, events: s.events, boundary: s.boundary })
+  for (const s of sessions) {
+    s.inputHash = hash({ version: 1, events: s.events, boundary: s.boundary })
+    const last = [...s.events].reverse().find(e => e.kind === 'customer' || e.kind === 'agent')
+    s.outcome = !last ? null : last.kind === 'customer' ? 'AGENTE_SIN_RESPUESTA' : /[?¿]/.test(last.text) ? 'CLIENTE_SIN_RESPUESTA' : 'FINAL_SIN_PREGUNTA'
+  }
   return sessions.filter(s => s.events.some(e => e.kind === 'customer' || e.kind === 'agent')).sort((a, b) => b.start.localeCompare(a.start))
 }
