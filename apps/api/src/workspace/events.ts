@@ -6,11 +6,13 @@ export interface Event {
 }
 // How the conversation ended — a deterministic heuristic on the last
 // commercial message, independent of the quality verdict:
+//   SIN_INTERACCION       — the customer never wrote again after the agent's
+//     first message (greeting only, no dialogue — nothing to evaluate)
 //   CLIENTE_SIN_RESPUESTA — the agent's final message asks a question the
 //     customer never answered (mid-flow abandonment)
 //   AGENTE_SIN_RESPUESTA  — the customer's final message got no agent reply
 //   FINAL_SIN_PREGUNTA    — the agent had the last word without an open question
-export type SessionOutcome = 'CLIENTE_SIN_RESPUESTA' | 'AGENTE_SIN_RESPUESTA' | 'FINAL_SIN_PREGUNTA'
+export type SessionOutcome = 'SIN_INTERACCION' | 'CLIENTE_SIN_RESPUESTA' | 'AGENTE_SIN_RESPUESTA' | 'FINAL_SIN_PREGUNTA'
 
 // How trustworthy the session reconstruction is. Conversations are rebuilt
 // from bare messages (the BigQuery view has no session id), so both edges are
@@ -145,8 +147,13 @@ export function sessionsFromEvents(events: Event[]): ReviewSession[] {
   }
   for (const s of sessions) {
     s.inputHash = hash({ version: 1, events: s.events, boundary: s.boundary })
-    const last = [...s.events].reverse().find(e => e.kind === 'customer' || e.kind === 'agent')
-    s.outcome = !last ? null : last.kind === 'customer' ? 'AGENTE_SIN_RESPUESTA' : /[?¿]/.test(last.text) ? 'CLIENTE_SIN_RESPUESTA' : 'FINAL_SIN_PREGUNTA'
+    const commercial = s.events.filter(e => e.kind === 'customer' || e.kind === 'agent')
+    const last = commercial.at(-1)
+    const firstAgent = commercial.findIndex(e => e.kind === 'agent')
+    const dialogue = firstAgent >= 0 && commercial.slice(firstAgent + 1).some(e => e.kind === 'customer')
+    s.outcome = !last ? null : last.kind === 'customer' ? 'AGENTE_SIN_RESPUESTA'
+      : !dialogue ? 'SIN_INTERACCION'
+      : /[?¿]/.test(last.text) ? 'CLIENTE_SIN_RESPUESTA' : 'FINAL_SIN_PREGUNTA'
   }
   // Reconstruction confidence: adjacency within the same subject (including
   // sessions filtered out below) plus distance to the edges of imported data.

@@ -31,12 +31,14 @@ describe('Yalo event ingestion', () => {
     expect(sessionsFromEvents([first, { ...second, subject: 'two' }])).toHaveLength(2)
   })
   it('classifies who left the conversation hanging', () => {
-    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'busco un televisor'), event('2', '12:01', 'agent', '¿Para sala o habitación?')])[0].outcome).toBe('CLIENTE_SIN_RESPUESTA')
+    // Greeting only, no dialogue after the agent's first message.
+    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'busco un televisor'), event('2', '12:01', 'agent', '¿Para sala o habitación?')])[0].outcome).toBe('SIN_INTERACCION')
     expect(sessionsFromEvents([event('1', '12:00', 'customer', 'busco un televisor')])[0].outcome).toBe('AGENTE_SIN_RESPUESTA')
-    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'gracias'), event('2', '12:01', 'agent', 'Con gusto, feliz día')])[0].outcome).toBe('FINAL_SIN_PREGUNTA')
+    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'un celular'), event('2', '12:01', 'agent', '¿Para qué uso?'), event('3', '12:02', 'customer', 'para juegos'), event('4', '12:03', 'agent', '¿Qué presupuesto tienes?')])[0].outcome).toBe('CLIENTE_SIN_RESPUESTA')
+    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'un celular'), event('2', '12:01', 'agent', '¿marca?'), event('3', '12:02', 'customer', 'gracias'), event('4', '12:03', 'agent', 'Con gusto, feliz día')])[0].outcome).toBe('FINAL_SIN_PREGUNTA')
   })
   it('ignores closure and survey events when classifying the outcome', () => {
-    const sessions = sessionsFromEvents([event('1', '12:00', 'customer', 'un celular'), event('2', '12:01', 'agent', '¿Qué presupuesto tienes?'), event('3', '13:30', 'closure'), event('4', '13:31', 'survey')])
+    const sessions = sessionsFromEvents([event('1', '12:00', 'customer', 'un celular'), event('2', '12:01', 'agent', '¿Qué presupuesto tienes?'), event('3', '12:02', 'customer', '2 millones'), event('4', '12:03', 'agent', '¿Alguna marca preferida?'), event('5', '13:30', 'closure'), event('6', '13:31', 'survey')])
     expect(sessions[0].outcome).toBe('CLIENTE_SIN_RESPUESTA')
   })
   it('rates reconstruction confidence from edges and gaps', () => {

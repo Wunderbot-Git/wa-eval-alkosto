@@ -28,6 +28,7 @@ export function reviewOf(s: Row) {
 export const reviewNames: Record<string, string> = { reviewed: 'Revisada', in_progress: 'En revisión', pending: 'Por revisar', agreed: 'Revisada · de acuerdo', disagreed: 'Revisada · en desacuerdo', unavailable: '—' }
 // Deterministic conversation outcome (last commercial message), independent of quality.
 export const outcomeNames: Record<string, string> = {
+  SIN_INTERACCION: 'Sin diálogo: el cliente no respondió al saludo',
   CLIENTE_SIN_RESPUESTA: 'Cliente no respondió a la última pregunta',
   AGENTE_SIN_RESPUESTA: 'Agente no respondió al último mensaje',
   FINAL_SIN_PREGUNTA: 'Terminó sin pregunta pendiente',
