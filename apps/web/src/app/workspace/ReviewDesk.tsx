@@ -1,15 +1,19 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { criterionNames, groupOf, groups, outcomeNames, reconstructionNames, reconstructionNotes, reviewOf, Row } from './dashboard-model'
+import { criterionNames, groupOf, groups, outcomeNames, reconstructionNames, reconstructionNotes, reviewNames, reviewOf, Row } from './dashboard-model'
 import './review-desk.css'
 import GuidedReview, { humanState } from './GuidedReview'
 const statuses: Record<string, string> = { INCUMPLE: 'Hallazgo', CUMPLE: 'Cumple', NO_APLICA: 'No aplica', EVIDENCIA_INSUFICIENTE: 'Evidencia insuficiente' }
 const timestamp = (v: string) => new Date(v).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })
+const shortDate = (v: string) => new Date(v).toLocaleString('es-CO', { timeZone: 'America/Bogota', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 const day = (v: string) => new Date(v).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'long', year: 'numeric' })
 export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefresh }: { sessions: Row[]; selectedId: string; onSelect: (id: string) => void; api: (path: string, options?: RequestInit) => Promise<any>; onRefresh: () => Promise<void> }) {
   const [humanEvidence, setHumanEvidence] = useState<string[]>([])
   const [selectedMessages, setSelectedMessages] = useState<string[]>([])
   const [selecting, setSelecting] = useState(false)
+  // Focus overlay: cards are the entry point; arriving with a preselected
+  // conversation (e.g. dashboard "Ver evaluación") opens it directly.
+  const [open, setOpen] = useState(!!selectedId)
   const [filter, setFilter] = useState('all')
   const [detail, setDetail] = useState<Row | null>(null)
   const [error, setError] = useState('')
@@ -36,6 +40,13 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
     if (activeId) apiRef.current('/sessions/' + activeId).then(d => { if (!cancelled) setDetail(d) }).catch(e => { if (!cancelled) setError(e.message) })
     return () => { cancelled = true }
   }, [activeId, revision])
+  useEffect(() => { if (selectedId) setOpen(true) }, [selectedId])
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
   const assessment = detail?.assessments?.[0]
   const verdict = assessment?.payload?.verdict
   const stale = assessment && (assessment.inputHash !== detail?.inputHash || assessment.payload.rubricVersion !== detail?.rubricVersion)
@@ -66,10 +77,26 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
     } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
   }
   return <div className="review-desk">
-    <div className="desk-queue"><label>Cola de revisión<select value={filter} disabled={busy} onChange={e => setFilter(e.target.value)}><option value="all">Todas las conversaciones</option><option value="findings">Con hallazgos</option><option value="review">Pendientes de revisión humana</option></select></label><label className="desk-picker">Conversación<select aria-label="Seleccionar conversación para revisar" value={activeId} disabled={busy || !queue.length} onChange={e => onSelect(e.target.value)}>{!queue.length && <option value="">Sin casos en esta cola</option>}{queue.map(s => <option key={s.id} value={s.id}>{s.subject.slice(0, 8)} · {String(s.preview || 'Sin consulta visible').slice(0, 65)} · {groups.find(g => g.id === groupOf(s))?.title}</option>)}</select></label><div className="desk-paging"><span>{position < 0 ? 0 : position + 1} de {queue.length}</span><button aria-label="Conversación anterior" disabled={busy || position <= 0} onClick={() => onSelect(queue[position - 1].id)}>←</button><button aria-label="Conversación siguiente" disabled={busy || position < 0 || position >= queue.length - 1} onClick={() => onSelect(queue[position + 1].id)}>→</button></div></div>
+    {!open ? <>
+    <div className="desk-queue"><label>Cola de revisión<select value={filter} disabled={busy} onChange={e => setFilter(e.target.value)}><option value="all">Todas las conversaciones</option><option value="findings">Con hallazgos</option><option value="review">Pendientes de revisión humana</option></select></label><span className="desk-count">{queue.length} conversaciones · haz clic en una tarjeta para revisarla</span></div>
     {error && <div className="desk-error" role="alert">{error} <button disabled={busy} onClick={() => setRevision(n => n + 1)}>Actualizar conversación</button></div>}
     {notice && <p className="desk-saved" role="status">{notice}</p>}
-    {!activeId ? <p className="empty">No hay conversaciones en esta cola. Cambia el filtro.</p> : !detail ? <p className="empty" role="status">Cargando conversación y evaluación…</p> : <>
+    {!queue.length ? <p className="empty">No hay conversaciones en esta cola. Cambia el filtro.</p> :
+    <div className="desk-cards">{queue.map(s => { const g = groups.find(g => g.id === groupOf(s))!; const a = s.assessment && !s.assessment.stale ? s.assessment : null; const f = a ? a.criteria.filter((c: Row) => c.status === 'INCUMPLE').length : 0; return <button key={s.id} className="desk-card" onClick={() => { onSelect(s.id); setOpen(true) }}>
+      <small>{shortDate(s.start)} · {s.subject.slice(0, 8)}{s.outcome ? ` · ${outcomeNames[s.outcome]}` : ''}</small>
+      <strong>{s.preview || 'Sin consulta visible'}</strong>
+      <p>{a ? a.summary : s.assessment ? 'Reevaluación necesaria: cambiaron los mensajes o la rúbrica.' : 'Sin evaluar todavía.'}</p>
+      <span className="desk-card-chips"><span className={`outcome-tag ${g.tone}`}>{g.title}</span>{f > 0 && <span className="outcome-tag danger">{f} {f === 1 ? 'hallazgo' : 'hallazgos'}</span>}<span className={`outcome-tag human-status ${reviewOf(s)}`}>{reviewNames[reviewOf(s)]}</span></span>
+    </button> })}</div>}
+    </> : <div className="desk-overlay" role="dialog" aria-modal="true" aria-label="Revisión de la conversación">
+    <div className="desk-overlay-bar">
+      <button className="desk-overlay-close" onClick={() => setOpen(false)}>✕ Cerrar</button>
+      <span className="desk-overlay-pos">{position < 0 ? 0 : position + 1} de {queue.length}</span>
+      <div className="desk-paging"><button aria-label="Conversación anterior" disabled={busy || position <= 0} onClick={() => onSelect(queue[position - 1].id)}>←</button><button aria-label="Conversación siguiente" disabled={busy || position < 0 || position >= queue.length - 1} onClick={() => onSelect(queue[position + 1].id)}>→</button></div>
+      {notice && <p className="desk-saved" role="status">{notice}</p>}
+      {error && <div className="desk-error" role="alert">{error} <button disabled={busy} onClick={() => setRevision(n => n + 1)}>Actualizar conversación</button></div>}
+    </div>
+    {!activeId ? <p className="empty">No hay conversaciones en esta cola.</p> : !detail ? <p className="empty" role="status">Cargando conversación y evaluación…</p> : <>
     <div className="desk-mobile-tabs"><button aria-pressed={mobile === 'findings'} onClick={() => setMobile('findings')}>Evaluación y hallazgos</button><button aria-pressed={mobile === 'chat'} onClick={() => setMobile('chat')}>Conversación</button></div>
     <div className={'desk-panels mobile-' + mobile}>
       <section className="desk-evaluation" aria-label="Evaluación y hallazgos">
@@ -104,5 +131,6 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
         </div><div className="wa-footer">{selectedMessages.length > 0 && <button onClick={() => setMobile('findings')}>{selectedMessages.length} mensajes · Añadir observación ←</button>}Conversación histórica · No se envían mensajes desde esta vista.</div>
       </section>
     </div></>}
+    </div>}
   </div>
 }
