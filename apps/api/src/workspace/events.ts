@@ -162,9 +162,12 @@ export function sessionsFromEvents(events: Event[]): ReviewSession[] {
     const startReason = s.events[0]?.kind === 'reset' ? 'REINICIO'
       : !prev ? (t(s.start) - minAll < 86400000 ? 'BORDE_DE_DATOS' : 'PRIMER_CONTACTO')
       : prev.boundary === 'CIERRE_YALO' ? 'TRAS_CIERRE' : 'TRAS_INACTIVIDAD'
+    // One hour of observed silence after the session end already proves the
+    // session is over (any later message within the hour would have extended
+    // it), so only ends closer than 1h to the data edge can still continue.
     const endReason = s.boundary === 'CIERRE_YALO' ? 'CIERRE_YALO'
       : next ? (next.events[0]?.kind === 'reset' ? 'REINICIO' : 'INACTIVIDAD')
-      : maxAll - t(s.end) < 7200000 ? 'BORDE_DE_DATOS' : 'SILENCIO'
+      : maxAll - t(s.end) < 3600000 ? 'BORDE_DE_DATOS' : 'SILENCIO'
     const risky = startReason === 'BORDE_DE_DATOS' || endReason === 'BORDE_DE_DATOS'
       || (startReason === 'TRAS_INACTIVIDAD' && gapBeforeMin !== null && gapBeforeMin < 90)
       || (endReason === 'INACTIVIDAD' && gapAfterMin !== null && gapAfterMin < 90)
