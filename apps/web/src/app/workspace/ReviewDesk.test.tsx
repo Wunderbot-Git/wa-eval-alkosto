@@ -28,7 +28,6 @@ describe('review desk evidence workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Evidencia siguiente' }))
     await waitFor(() => expect(container.querySelector('.wa-focused')?.getAttribute('data-message-id')).toBe('e4'))
     expect(HTMLElement.prototype.scrollTo).toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: /Ver todos los criterios/ }))
     fireEvent.click(screen.getByRole('button', { name: /Exactitud de la información/ }))
     expect(container.querySelectorAll('[data-evidence="true"]')).toHaveLength(0)
     expect(screen.getByText('Este criterio no cita mensajes disponibles.')).toBeTruthy()
