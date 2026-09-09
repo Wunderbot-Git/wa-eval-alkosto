@@ -72,6 +72,17 @@ describe('review desk evidence workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar observación' }))
     await waitFor(() => expect(api).toHaveBeenCalledWith('/assessments/a1/guided-review', expect.objectContaining({ body: expect.stringContaining('"evidenceIds":["e1","e2"]') })))
   })
+  it('shows conversation cards and opens the focus overlay on click', async () => {
+    const api = vi.fn().mockResolvedValue(detail)
+    render(<ReviewDesk sessions={sessions} selectedId="" onSelect={() => {}} api={api} onRefresh={async () => {}} />)
+    // Grid first: no review content until a card is opened.
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: /Sin consulta visible/ }))
+    await screen.findByRole('dialog')
+    await screen.findByRole('button', { name: '✓ Confirmar' })
+    fireEvent.click(screen.getByRole('button', { name: '✕ Cerrar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
   it('only advances after the completion request succeeds', async () => {
     const completedFinding = { ...detail, assessments: [{ ...detail.assessments[0], payload: { ...detail.assessments[0].payload, humanReview: [{ id: 'r', action: 'decision', criterion: 'adecuacion', decision: 'confirm', at: '2026-09-08T10:00:00Z', userId: 'u' }] } }] }
     const api = vi.fn().mockImplementation(async (_path, options) => { if (options?.method === 'POST') throw new Error('No se pudo guardar'); return completedFinding })
