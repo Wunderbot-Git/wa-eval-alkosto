@@ -27,13 +27,13 @@ describe('commercial dashboard classification', () => {
   })
   it('filters by Colombian conversation date rather than UTC or evaluation date', () => {
     const s = row([pass])
-    const f = { from: '2026-08-31', to: '2026-08-31', category: '', review: '', search: '' }
+    const f = { from: '2026-08-31', to: '2026-08-31', category: '', review: '', outcome: '', rec: '', search: '' }
     expect(filterRows([s], f)).toHaveLength(1)
     expect(filterRows([s], { ...f, from: '2026-09-01', to: '2026-09-01' })).toHaveLength(0)
   })
   it('combines category, human review and text filters', () => {
     const s = row([pass], { categories: ['Computadores', 'Monitores'], summary: 'Presupuesto', review: { decision: 'EN_DESACUERDO' } })
-    const f = { from: '', to: '', category: 'Monitores', review: 'disagreed', search: 'presupuesto' }
+    const f = { from: '', to: '', category: 'Monitores', review: 'disagreed', outcome: '', rec: '', search: 'presupuesto' }
     expect(filterRows([s], f)).toHaveLength(1)
     expect(filterRows([s], { ...f, review: 'agreed' })).toHaveLength(0)
   })

@@ -30,6 +30,35 @@ describe('Yalo event ingestion', () => {
     expect(sessionsFromEvents([first, second])).toHaveLength(1)
     expect(sessionsFromEvents([first, { ...second, subject: 'two' }])).toHaveLength(2)
   })
+  it('classifies who left the conversation hanging', () => {
+    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'busco un televisor'), event('2', '12:01', 'agent', '¿Para sala o habitación?')])[0].outcome).toBe('CLIENTE_SIN_RESPUESTA')
+    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'busco un televisor')])[0].outcome).toBe('AGENTE_SIN_RESPUESTA')
+    expect(sessionsFromEvents([event('1', '12:00', 'customer', 'gracias'), event('2', '12:01', 'agent', 'Con gusto, feliz día')])[0].outcome).toBe('FINAL_SIN_PREGUNTA')
+  })
+  it('ignores closure and survey events when classifying the outcome', () => {
+    const sessions = sessionsFromEvents([event('1', '12:00', 'customer', 'un celular'), event('2', '12:01', 'agent', '¿Qué presupuesto tienes?'), event('3', '13:30', 'closure'), event('4', '13:31', 'survey')])
+    expect(sessions[0].outcome).toBe('CLIENTE_SIN_RESPUESTA')
+  })
+  it('rates reconstruction confidence from edges and gaps', () => {
+    // Filler events push the data window far from the conversation on both sides.
+    const filler = [{ ...event('f1', '12:00', 'trace'), subject: 'filler', at: '2026-08-25T12:00:00Z' }, { ...event('f2', '12:00', 'trace'), subject: 'filler', at: '2026-09-05T12:00:00Z' }]
+    const closed = sessionsFromEvents([...filler, event('1', '12:00', 'customer', 'un televisor'), event('2', '12:05', 'agent', 'claro'), event('3', '13:00', 'closure')]).find(s => s.subject === 'one')!
+    expect(closed.reconstruction).toMatchObject({ confidence: 'ALTA', startReason: 'PRIMER_CONTACTO', endReason: 'CIERRE_YALO' })
+
+    const silent = sessionsFromEvents([...filler, event('1', '12:00', 'customer', 'un televisor'), event('2', '12:05', 'agent', '¿marca?')]).find(s => s.subject === 'one')!
+    expect(silent.reconstruction).toMatchObject({ confidence: 'ALTA', endReason: 'SILENCIO' })
+  })
+  it('flags data-edge truncation and borderline splits as low confidence', () => {
+    const edge = sessionsFromEvents([event('1', '12:00', 'customer', 'hola'), event('2', '12:05', 'agent', 'hola')])[0]
+    expect(edge.reconstruction).toMatchObject({ confidence: 'BAJA', startReason: 'BORDE_DE_DATOS', endReason: 'BORDE_DE_DATOS' })
+
+    const filler = [{ ...event('f1', '12:00', 'trace'), subject: 'filler', at: '2026-08-25T12:00:00Z' }, { ...event('f2', '12:00', 'trace'), subject: 'filler', at: '2026-09-05T12:00:00Z' }]
+    const split = sessionsFromEvents([...filler, event('1', '12:00', 'customer', 'hola'), event('2', '13:05', 'customer', 'sigo aquí')]).filter(s => s.subject === 'one')
+    expect(split).toHaveLength(2)
+    // 65-minute gap: barely over the 1h threshold on both sides of the split
+    expect(split.every(s => s.reconstruction?.confidence === 'BAJA')).toBe(true)
+    expect(split.find(s => s.reconstruction?.startReason === 'TRAS_INACTIVIDAD')?.reconstruction?.gapBeforeMin).toBe(65)
+  })
   it('marks inactivity and rebuilds deterministically independent of input order', () => {
     const events = [event('1', '12:00', 'customer'), event('2', '14:00', 'customer')]
     expect(sessionsFromEvents(events)).toEqual(sessionsFromEvents([...events].reverse()))

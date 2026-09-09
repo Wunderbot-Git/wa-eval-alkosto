@@ -4,9 +4,42 @@ export type EventKind = 'customer' | 'agent' | 'closure' | 'survey' | 'rating' |
 export interface Event {
   id: string; subject: string; at: string; kind: EventKind; text: string; media: string; cardsText?: string
 }
+// How the conversation ended — a deterministic heuristic on the last
+// commercial message, independent of the quality verdict:
+//   CLIENTE_SIN_RESPUESTA — the agent's final message asks a question the
+//     customer never answered (mid-flow abandonment)
+//   AGENTE_SIN_RESPUESTA  — the customer's final message got no agent reply
+//   FINAL_SIN_PREGUNTA    — the agent had the last word without an open question
+export type SessionOutcome = 'CLIENTE_SIN_RESPUESTA' | 'AGENTE_SIN_RESPUESTA' | 'FINAL_SIN_PREGUNTA'
+
+// How trustworthy the session reconstruction is. Conversations are rebuilt
+// from bare messages (the BigQuery view has no session id), so both edges are
+// heuristic. Deterministic signals only:
+//   startReason  REINICIO (!reset) · TRAS_CIERRE (previous session closed by
+//                Yalo) · PRIMER_CONTACTO (first observed contact, well inside
+//                the imported window) · TRAS_INACTIVIDAD (split by >=1h gap) ·
+//                BORDE_DE_DATOS (starts near the edge of imported data —
+//                earlier context may be missing)
+//   endReason    CIERRE_YALO · REINICIO (next session starts with reset) ·
+//                INACTIVIDAD (split by gap) · SILENCIO (customer never wrote
+//                again) · BORDE_DE_DATOS (ends near the data edge — may
+//                continue beyond the import window)
+//   confidence   ALTA (both edges confirmed) · MEDIA (clean inferred splits) ·
+//                BAJA (data-edge truncation risk, or a split barely over the
+//                1h threshold that could belong to the same conversation)
+export interface SessionReconstruction {
+  confidence: 'ALTA' | 'MEDIA' | 'BAJA'
+  startReason: 'REINICIO' | 'TRAS_CIERRE' | 'PRIMER_CONTACTO' | 'TRAS_INACTIVIDAD' | 'BORDE_DE_DATOS'
+  endReason: 'CIERRE_YALO' | 'REINICIO' | 'INACTIVIDAD' | 'SILENCIO' | 'BORDE_DE_DATOS'
+  gapBeforeMin: number | null
+  gapAfterMin: number | null
+}
+
 export interface ReviewSession {
   id: string; subject: string; start: string; end: string; boundary: string
   incompleteStart: boolean; events: Event[]; inputHash: string; rating: number | null
+  outcome: SessionOutcome | null
+  reconstruction: SessionReconstruction | null
 }
 const canonical = (value: any): any => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' && !(value instanceof Date) ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value
 export const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex')
@@ -88,7 +121,7 @@ export function sessionsFromEvents(events: Event[]): ReviewSession[] {
     let current: ReviewSession | undefined; let pendingSurvey = false
     const start = (e: Event) => {
       current = { id: hash(['session-v1', subject, e.id]), subject, start: e.at, end: e.at,
-        boundary: 'ABIERTA', incompleteStart: true, events: [], inputHash: '', rating: null }
+        boundary: 'ABIERTA', incompleteStart: true, events: [], inputHash: '', rating: null, outcome: null, reconstruction: null }
       sessions.push(current); pendingSurvey = false
     }
     for (const original of group) {
@@ -110,6 +143,34 @@ export function sessionsFromEvents(events: Event[]): ReviewSession[] {
       current!.events.push(e); current!.end = e.at
     }
   }
-  for (const s of sessions) s.inputHash = hash({ version: 1, events: s.events, boundary: s.boundary })
+  for (const s of sessions) {
+    s.inputHash = hash({ version: 1, events: s.events, boundary: s.boundary })
+    const last = [...s.events].reverse().find(e => e.kind === 'customer' || e.kind === 'agent')
+    s.outcome = !last ? null : last.kind === 'customer' ? 'AGENTE_SIN_RESPUESTA' : /[?¿]/.test(last.text) ? 'CLIENTE_SIN_RESPUESTA' : 'FINAL_SIN_PREGUNTA'
+  }
+  // Reconstruction confidence: adjacency within the same subject (including
+  // sessions filtered out below) plus distance to the edges of imported data.
+  const t = (iso: string) => new Date(iso).getTime()
+  const times = events.map(e => t(e.at))
+  const minAll = Math.min(...times); const maxAll = Math.max(...times)
+  const bySubject = new Map<string, ReviewSession[]>()
+  for (const s of sessions) bySubject.set(s.subject, [...(bySubject.get(s.subject) || []), s])
+  for (const list of bySubject.values()) list.forEach((s, i) => {
+    const prev = list[i - 1]; const next = list[i + 1]
+    const gapBeforeMin = prev ? Math.round((t(s.start) - t(prev.end)) / 60000) : null
+    const gapAfterMin = next ? Math.round((t(next.start) - t(s.end)) / 60000) : null
+    const startReason = s.events[0]?.kind === 'reset' ? 'REINICIO'
+      : !prev ? (t(s.start) - minAll < 86400000 ? 'BORDE_DE_DATOS' : 'PRIMER_CONTACTO')
+      : prev.boundary === 'CIERRE_YALO' ? 'TRAS_CIERRE' : 'TRAS_INACTIVIDAD'
+    const endReason = s.boundary === 'CIERRE_YALO' ? 'CIERRE_YALO'
+      : next ? (next.events[0]?.kind === 'reset' ? 'REINICIO' : 'INACTIVIDAD')
+      : maxAll - t(s.end) < 7200000 ? 'BORDE_DE_DATOS' : 'SILENCIO'
+    const risky = startReason === 'BORDE_DE_DATOS' || endReason === 'BORDE_DE_DATOS'
+      || (startReason === 'TRAS_INACTIVIDAD' && gapBeforeMin !== null && gapBeforeMin < 90)
+      || (endReason === 'INACTIVIDAD' && gapAfterMin !== null && gapAfterMin < 90)
+    const confident = ['REINICIO', 'TRAS_CIERRE', 'PRIMER_CONTACTO'].includes(startReason)
+      && ['CIERRE_YALO', 'REINICIO', 'SILENCIO'].includes(endReason)
+    s.reconstruction = { confidence: risky ? 'BAJA' : confident ? 'ALTA' : 'MEDIA', startReason, endReason, gapBeforeMin, gapAfterMin }
+  })
   return sessions.filter(s => s.events.some(e => e.kind === 'customer' || e.kind === 'agent')).sort((a, b) => b.start.localeCompare(a.start))
 }
