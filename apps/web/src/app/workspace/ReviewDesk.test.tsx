@@ -14,7 +14,8 @@ const detail = { id: 's1', subject: 'private123', inputHash: 'hash', rubricVersi
     { name: 'exactitud', status: 'EVIDENCIA_INSUFICIENTE', reason: 'Falta catálogo', evidenceIds: [] },
   ] } } }],
 }
-const sessions = [{ id: 's1', subject: 'private123', start: '2026-08-31T15:00:00Z', assessment: { criteria: detail.assessments[0].payload.verdict.criteria } }]
+const sessions = [{ id: 's1', subject: 'private123', start: '2026-08-31T15:00:00Z', outcome: 'CLIENTE_SIN_RESPUESTA', preview: 'Hasta un millón',
+  assessment: { score: 5, criteria: detail.assessments[0].payload.verdict.criteria } }]
 beforeEach(() => { HTMLElement.prototype.scrollTo = vi.fn(); vi.stubGlobal('requestAnimationFrame', (cb: () => void) => setTimeout(cb, 0)); vi.stubGlobal('cancelAnimationFrame', clearTimeout) })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 describe('review desk evidence workflow', () => {
@@ -84,7 +85,12 @@ describe('review desk evidence workflow', () => {
     render(<ReviewDesk sessions={sessions} selectedId="" onSelect={() => {}} api={api} onRefresh={async () => {}} />)
     // Grid first: no review content until a card is opened.
     expect(screen.queryByRole('dialog')).toBeNull()
-    fireEvent.click(await screen.findByRole('button', { name: /Sin consulta visible/ }))
+    const card = await screen.findByRole('button', { name: /Cliente no respondió/ })
+    // Cards triage by status, not by conversation text.
+    expect(card.textContent).not.toContain('Hasta un millón')
+    expect(card.textContent).toContain('1 hallazgo')
+    expect(card.textContent).toContain('Por revisar')
+    fireEvent.click(card)
     await screen.findByRole('dialog')
     await screen.findByRole('button', { name: '✓ Confirmar' })
     fireEvent.click(screen.getByRole('button', { name: '✕ Cerrar' }))
