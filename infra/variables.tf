@@ -81,6 +81,18 @@ variable "auto_import_daily" {
   default     = false
 }
 
+variable "auto_evaluate_daily" {
+  description = "After the daily import, evaluate the conversations with enough dialogue to judge (requires api_min_instances >= 1 and Gemini access; two model calls per conversation)"
+  type        = bool
+  default     = false
+}
+
+variable "auto_evaluate_limit" {
+  description = "Maximum conversations evaluated in one automatic run, so an unusually large import cannot become an unexpected model bill"
+  type        = number
+  default     = 200
+}
+
 variable "bigquery_project" {
   description = "Billing project for workspace BigQuery imports (empty = GOOGLE_CLOUD_PROJECT)"
   type        = string

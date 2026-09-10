@@ -22,6 +22,7 @@ class WorkspaceController {
   @Post('catalogs') @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
   catalog(@UploadedFile() file: Express.Multer.File, @Body() body: any) { if (!file) throw new BadRequestException('Selecciona un JSON'); return this.service.importCatalog(file.buffer, body.source, body.capturedAt) }
   @Post('sessions/:id/evaluate') evaluate(@Param('id') id: string) { return this.service.evaluate(id) }
+  @Post('evaluate/pending') evaluatePending(@Body() body: any) { return this.service.startPendingEvaluation(body) }
   @Post('assessments/:id/review') review(@Param('id') id: string, @Body() body: any, @Req() req: any) { return this.service.reviewAssessment(id, body, req.user.id) }
   @Post('assessments/:id/guided-review') guided(@Param('id') id: string, @Body() body: any, @Req() req: any) { return this.service.guidedReview(id, body, req.user.id) }
   @Post('issues') issue(@Body() body: any) { return this.service.createIssue(body) }

@@ -1,7 +1,7 @@
 import { reviewAction, reviewState } from './human-review'
 import { ConflictException, BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
-import { Event, hash, parseEvents, redact, sessionsFromEvents } from './events'
+import { evaluationCandidacy, Event, hash, parseEvents, redact, sessionsFromEvents } from './events'
 import { GoogleGenAI } from '@google/genai'
 import { resolveGeminiMode } from '../judges/gemini/gemini-client.service'
 import { cloudRequest, queryMessages } from './google-cloud'
@@ -60,6 +60,14 @@ export function validateVerdict(value: any, ids: Set<string>) {
 export class WorkspaceService {
   constructor(private readonly db: PrismaService) {}
   private busy = new Set<string>()
+  // Progress of the running batch, polled by the workspace overview. In
+  // memory on purpose: a batch is a one-off operation, and a restart must
+  // not leave a "running" flag behind that blocks every later run.
+  private batch: { running: boolean; total: number; done: number; failed: number; startedAt: string; finishedAt: string | null; lastError: string | null } | null = null
+  private limits() {
+    const int = (name: string, fallback: number) => { const v = Number(process.env[name]); return Number.isInteger(v) && v > 0 ? v : fallback }
+    return { messages: int('EVALUATE_MIN_MESSAGES', 4), customerTurns: int('EVALUATE_MIN_CUSTOMER_TURNS', 2) }
+  }
   async sessions() {
     const rows = await this.db.reviewEvent.findMany({ orderBy: { occurredAt: 'asc' } })
     return sessionsFromEvents(rows.map(r => r.payload as unknown as Event))
@@ -70,11 +78,12 @@ export class WorkspaceService {
       this.db.reviewCatalog.findMany({ orderBy: { capturedAt: 'desc' }, select: { id: true, source: true, capturedAt: true, verified: true } }),
       this.db.reviewIssue.findMany({ orderBy: { updatedAt: 'desc' } }), this.db.reviewTest.findMany({ orderBy: { updatedAt: 'desc' } }),
     ])
+    const limits = this.limits()
     return { sessions: sessions.map(s => {
       const a = assessments.find(a => a.sessionId === s.id)
-      return { ...s, events: undefined, count: s.events.length, preview: s.events.find(e => e.kind === 'customer')?.text.slice(0, 140),
+      return { ...s, events: undefined, count: s.events.length, candidacy: evaluationCandidacy(s, limits).reason, preview: s.events.find(e => e.kind === 'customer')?.text.slice(0, 140),
         assessment: a ? { ...(a.payload as any).verdict, id: a.id, createdAt: a.createdAt, humanReview: reviewState((a.payload as any).humanReview || []), review: ((a.payload as any).reviews || []).at(-1) || null, categories: [...new Set(((a.payload as any).extraction?.episodes || []).map((e: any) => e.category).filter(Boolean))], stale: a.inputHash !== s.inputHash || (a.payload as any).rubricVersion !== RUBRIC_VERSION } : null }
-    }), catalogs, issues, tests, aiReady: resolveGeminiMode() !== 'fake' || process.env.GOOGLE_AUTH_MODE === 'gcloud', cloudReady: process.env.GOOGLE_AUTH_MODE === 'gcloud' || !!process.env.BIGQUERY_PROJECT, model: process.env.GEMINI_MODEL || null }
+    }), catalogs, issues, tests, batch: this.batch, aiReady: resolveGeminiMode() !== 'fake' || process.env.GOOGLE_AUTH_MODE === 'gcloud', cloudReady: process.env.GOOGLE_AUTH_MODE === 'gcloud' || !!process.env.BIGQUERY_PROJECT, model: process.env.GEMINI_MODEL || null }
   }
   async detail(id: string) {
     const session = (await this.sessions()).find(s => s.id === id)
@@ -207,6 +216,43 @@ export class WorkspaceService {
       if (e instanceof ServiceUnavailableException || e instanceof NotFoundException) throw e
       throw new BadRequestException('No se guardó una evaluación: ' + redact((e as Error).message).slice(0, 220))
     } finally { this.busy.delete(id) }
+  }
+  // Conversations worth evaluating that have no current evaluation yet,
+  // newest first so a capped run covers the most recent day.
+  async pendingCandidates(limit: number) {
+    const sessions = await this.sessions()
+    const current = await this.db.reviewAssessment.findMany({ select: { sessionId: true, inputHash: true, payload: true } })
+    const limits = this.limits()
+    return sessions
+      .filter(s => evaluationCandidacy(s, limits).eligible)
+      .filter(s => !current.some(a => a.sessionId === s.id && a.inputHash === s.inputHash && (a.payload as any)?.rubricVersion === RUBRIC_VERSION))
+      .sort((a, b) => b.start.localeCompare(a.start))
+      .slice(0, limit)
+      .map(s => s.id)
+  }
+  // Sequential on purpose: two model calls per conversation, and a burst of
+  // parallel requests only buys rate-limit errors.
+  async evaluateBatch(ids: string[]) {
+    this.batch = { running: true, total: ids.length, done: 0, failed: 0, startedAt: new Date().toISOString(), finishedAt: null, lastError: null }
+    for (const id of ids) {
+      try { await this.evaluate(id); this.batch.done++ }
+      catch (e) { this.batch.failed++; this.batch.lastError = (e as Error).message }
+    }
+    this.batch.running = false; this.batch.finishedAt = new Date().toISOString()
+    return { ...this.batch }
+  }
+  // Returns as soon as the batch is under way — evaluating dozens of
+  // conversations takes far longer than any HTTP request may. Progress is
+  // read from the overview. On Cloud Run this needs a warm instance
+  // (api_min_instances >= 1), like the daily import.
+  async startPendingEvaluation(body: any = {}) {
+    if (this.batch?.running) throw new BadRequestException('Ya hay una evaluación en curso')
+    const requested = Number(body.limit)
+    const limit = Number.isInteger(requested) && requested > 0 ? Math.min(requested, 500) : 50
+    const ids = await this.pendingCandidates(limit)
+    if (!ids.length) throw new BadRequestException('No hay conversaciones aptas pendientes de evaluación')
+    void this.evaluateBatch(ids).catch(() => { if (this.batch) { this.batch.running = false; this.batch.finishedAt = new Date().toISOString() } })
+    return { started: ids.length }
   }
   async guidedReview(id: string, body: any, userId: string) {
     const a = await this.db.reviewAssessment.findUnique({ where: { id } })
