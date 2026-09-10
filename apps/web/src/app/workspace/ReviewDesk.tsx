@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { criterionNames, groupOf, groups, outcomeNames, reconstructionNames, reconstructionNotes, reviewNames, reviewOf, Row } from './dashboard-model'
+import { cardChips, criterionNames, groupOf, groups, outcomeNames, outcomeShort, reconstructionNames, reconstructionNotes, reviewOf, Row } from './dashboard-model'
 import './review-desk.css'
 import GuidedReview, { humanState } from './GuidedReview'
 const statuses: Record<string, string> = { INCUMPLE: 'Hallazgo', CUMPLE: 'Cumple', NO_APLICA: 'No aplica', EVIDENCIA_INSUFICIENTE: 'Evidencia insuficiente' }
@@ -85,11 +85,10 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
     {error && <div className="desk-error" role="alert">{error} <button disabled={busy} onClick={() => setRevision(n => n + 1)}>Actualizar conversación</button></div>}
     {notice && <p className="desk-saved" role="status">{notice}</p>}
     {!queue.length ? <p className="empty">No hay conversaciones en esta cola. Cambia el filtro.</p> :
-    <div className="desk-cards">{queue.map(s => { const g = groups.find(g => g.id === groupOf(s))!; const a = s.assessment && !s.assessment.stale ? s.assessment : null; const f = a ? a.criteria.filter((c: Row) => c.status === 'INCUMPLE').length : 0; return <button key={s.id} className="desk-card" onClick={() => { onSelect(s.id); setOpen(true) }}>
-      <small>{shortDate(s.start)} · {s.subject.slice(0, 8)}{s.outcome ? ` · ${outcomeNames[s.outcome]}` : ''}</small>
-      <strong>{s.preview || 'Sin consulta visible'}</strong>
-      <p>{a ? a.summary : s.assessment ? 'Reevaluación necesaria: cambiaron los mensajes o la rúbrica.' : 'Sin evaluar todavía.'}</p>
-      <span className="desk-card-chips"><span className={`outcome-tag ${g.tone}`}>{g.title}</span>{f > 0 && <span className="outcome-tag danger">{f} {f === 1 ? 'hallazgo' : 'hallazgos'}</span>}<span className={`outcome-tag human-status ${reviewOf(s)}`}>{reviewNames[reviewOf(s)]}</span></span>
+    <div className="desk-cards">{queue.map(s => { const a = s.assessment && !s.assessment.stale ? s.assessment : null; return <button key={s.id} className="desk-card" onClick={() => { onSelect(s.id); setOpen(true) }}>
+      <span className="desk-card-top"><small>{shortDate(s.start)}</small><b>{a ? `${a.score ?? '—'}/10` : ''}</b></span>
+      <strong>{s.outcome ? outcomeShort[s.outcome] : 'Conversación'}</strong>
+      <span className="desk-card-chips">{cardChips(s).map(c => <span key={c.label} className={`outcome-tag ${c.tone}`}>{c.label}</span>)}</span>
     </button> })}</div>}
     </> : <div className="desk-overlay" role="dialog" aria-modal="true" aria-label="Revisión de la conversación">
     <div className="desk-overlay-bar">

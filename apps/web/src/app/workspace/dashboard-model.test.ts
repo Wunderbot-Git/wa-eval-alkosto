@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterRows, groupOf, reviewOf } from './dashboard-model'
+import { cardChips, filterRows, groupOf, reviewOf } from './dashboard-model'
 const row = (criteria: any[], extra = {}) => ({ start: '2026-09-01T03:00:00Z', subject: 'test', assessment: { criteria, ...extra } })
 const pass = { name: 'comunicacion', status: 'CUMPLE' }
 const unknown = { name: 'exactitud', status: 'EVIDENCIA_INSUFICIENTE' }
@@ -30,6 +30,18 @@ describe('commercial dashboard classification', () => {
     const f = { from: '2026-08-31', to: '2026-08-31', category: '', review: '', outcome: '', rec: '', search: '' }
     expect(filterRows([s], f)).toHaveLength(1)
     expect(filterRows([s], { ...f, from: '2026-09-01', to: '2026-09-01' })).toHaveLength(0)
+  })
+  it('summarizes a card in at most three chips and never with conversation text', () => {
+    const critical = { name: 'adecuacion', status: 'INCUMPLE', severity: 'CRITICAL' }
+    const warning = { name: 'resolucion', status: 'INCUMPLE', severity: 'WARNING' }
+    const s = { ...row([critical, warning, pass], { categories: ['Televisores'] }), preview: 'Hola, busco un televisor' }
+    const chips = cardChips(s)
+    expect(chips.map(c => c.label)).toEqual(['Crítico · 2 hallazgos', 'Televisores', 'Por revisar'])
+    expect(chips[0].tone).toBe('danger')
+    expect(chips.some(c => c.label.includes('televisor'))).toBe(false)
+    // Without an evaluation there is nothing to categorize or review yet.
+    expect(cardChips({ start: s.start, subject: 'test' }).map(c => c.label)).toEqual(['Sin evaluar'])
+    expect(cardChips(row([pass])).map(c => c.label)).toEqual(['Sin hallazgos', 'Por revisar'])
   })
   it('combines category, human review and text filters', () => {
     const s = row([pass], { categories: ['Computadores', 'Monitores'], summary: 'Presupuesto', review: { decision: 'EN_DESACUERDO' } })

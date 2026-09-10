@@ -69,3 +69,31 @@ export function filterRows(rows: Row[], f: { from: string; to: string; category:
     && (!f.outcome || s.outcome === f.outcome) && (!f.rec || s.reconstruction?.confidence === f.rec)
     && `${s.preview || ''} ${s.subject} ${s.assessment?.summary || ''} ${categoriesOf(s).join(' ')}`.toLowerCase().includes(f.search.toLowerCase()))
 }
+// Short outcome labels for cards and chips; the long sentences in
+// outcomeNames stay for the detail view where there is room to explain.
+export const outcomeShort: Record<string, string> = {
+  SIN_INTERACCION: 'Sin diálogo',
+  CLIENTE_SIN_RESPUESTA: 'Cliente no respondió',
+  AGENTE_SIN_RESPUESTA: 'Agente no respondió',
+  FINAL_SIN_PREGUNTA: 'Cerrada sin pregunta',
+}
+// What a reviewer needs to triage a card at a glance: the finding load,
+// the product category and the human review state — at most three chips,
+// never the message text.
+export function cardChips(s: Row): { label: string; tone: string }[] {
+  const group = groupOf(s)
+  const failures = (s.assessment?.criteria || []).filter((c: Row) => c.status === 'INCUMPLE').length
+  const count = `${failures} ${failures === 1 ? 'hallazgo' : 'hallazgos'}`
+  const verdict = group === 'critical' ? { label: `Crítico · ${count}`, tone: 'danger' }
+    : group === 'findings' ? { label: count, tone: 'warning' }
+    : group === 'incomplete' ? { label: 'Evidencia insuficiente', tone: 'neutral' }
+    : group === 'clear' ? { label: 'Sin hallazgos', tone: 'good' }
+    : group === 'stale' ? { label: 'Reevaluar', tone: 'muted' }
+    : { label: 'Sin evaluar', tone: 'muted' }
+  const chips = [verdict]
+  const category = group === 'pending' || group === 'stale' ? '' : categoriesOf(s)[0]
+  if (category && category !== 'Sin categoría evaluada') chips.push({ label: category, tone: 'plain' })
+  const review = reviewOf(s)
+  if (review !== 'unavailable') chips.push({ label: reviewNames[review], tone: 'human-status ' + review })
+  return chips
+}
