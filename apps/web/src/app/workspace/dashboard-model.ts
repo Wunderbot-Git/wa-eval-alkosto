@@ -7,7 +7,7 @@ export const groups = [
   { id: 'pending', title: 'Sin evaluar', hint: 'Todavía no hay una evaluación.', tone: 'muted' },
   { id: 'stale', title: 'Reevaluación necesaria', hint: 'Cambiaron los mensajes o la rúbrica. El resultado anterior no cuenta como vigente.', tone: 'muted' },
 ]
-export const criterionNames: Record<string, string> = { comprension: 'Comprensión de la necesidad', adecuacion: 'Adecuación del producto', exactitud: 'Exactitud de la información', comparacion: 'Comparación de opciones', contexto: 'Continuidad y contexto', resolucion: 'Resolución de la consulta', comunicacion: 'Claridad de la comunicación' }
+export const criterionNames: Record<string, string> = { comprension: 'Comprensión y confirmación de la necesidad', adecuacion: 'Adecuación del producto', exactitud: 'Exactitud de la información', comparacion: 'Comparación de opciones', contexto: 'Continuidad y contexto', resolucion: 'Resolución de la consulta', comunicacion: 'Claridad de la comunicación' }
 export function groupOf(s: Row) {
   const a = s.assessment
   if (!a) return 'pending'

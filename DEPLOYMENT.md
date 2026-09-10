@@ -186,6 +186,37 @@ In the workspace, the "Sin evaluar" section of Revisión shows how many of the
 pending conversations qualify and can start a batch of up to 50 on demand; it
 runs in the background and the queue reports its progress.
 
+### Calibration (pilot phase)
+
+The `Calibración` tab exists to tune the rubric against real conversations and
+is meant to be removed once the rubric is stable.
+
+Two things feed it. A reviewer marks a conversation the evaluation got wrong
+("⚑ Marcar para calibración" in the review overlay), recording what should have
+been detected together with the verdict and rubric version at that moment; the
+mark is stored on the conversation, not on the assessment, so it survives the
+re-evaluation that follows a rubric change. Separately, every re-evaluation
+appends a new assessment and keeps the old one, so the tab can compare the
+newest verdict against the newest one produced under a *different*
+`RUBRIC_VERSION` and list what moved, per criterion.
+
+Conversations are grouped by how much they deserve a second look, never by
+whether a change looks like an improvement — only a person can judge that:
+
+- **Contradice una revisión humana** — somebody had already reviewed the older
+  verdict and the new one differs. Either the change corrected their error or
+  introduced one; both are worth knowing immediately.
+- **Marcada y con cambio** — an open mark whose conversation moved: check
+  whether the change resolved it and close the mark.
+- **Marcada, sin cambio** — the change did not touch it; what was marked is
+  still unresolved.
+- **Cambió sin marca previa** — nobody had reviewed or marked it. Sampling here
+  shows whether the change behaves as intended across the rest of the corpus.
+
+Bumping `RUBRIC_VERSION` is what makes the comparison possible: it marks every
+existing assessment as stale so the conversations return to the evaluation
+queue under the new rubric.
+
 ## Gemini configuration reference
 
 | `gemini_mode` (tfvars) | Env vars set on `eval-api` | Notes |

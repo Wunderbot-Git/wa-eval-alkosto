@@ -23,6 +23,9 @@ class WorkspaceController {
   catalog(@UploadedFile() file: Express.Multer.File, @Body() body: any) { if (!file) throw new BadRequestException('Selecciona un JSON'); return this.service.importCatalog(file.buffer, body.source, body.capturedAt) }
   @Post('sessions/:id/evaluate') evaluate(@Param('id') id: string) { return this.service.evaluate(id) }
   @Post('evaluate/pending') evaluatePending(@Body() body: any) { return this.service.startPendingEvaluation(body) }
+  @Get('calibration') calibration() { return this.service.calibration() }
+  @Post('sessions/:id/flags') flag(@Param('id') id: string, @Body() body: any, @Req() req: any) { return this.service.flagSession(id, body, req.user.id) }
+  @Patch('flags/:id') resolveFlag(@Param('id') id: string, @Body() body: any, @Req() req: any) { return this.service.resolveFlag(id, body, req.user.id) }
   @Post('assessments/:id/review') review(@Param('id') id: string, @Body() body: any, @Req() req: any) { return this.service.reviewAssessment(id, body, req.user.id) }
   @Post('assessments/:id/guided-review') guided(@Param('id') id: string, @Body() body: any, @Req() req: any) { return this.service.guidedReview(id, body, req.user.id) }
   @Post('issues') issue(@Body() body: any) { return this.service.createIssue(body) }
