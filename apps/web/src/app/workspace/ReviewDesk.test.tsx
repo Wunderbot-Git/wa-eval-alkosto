@@ -96,6 +96,18 @@ describe('review desk evidence workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: '✕ Cerrar' }))
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+  it('asks the assistant about the evidence and highlights what it cites', async () => {
+    const answer = { question: '¿Qué productos mostró el agente?', answer: 'Mostró un portátil.', kind: 'RESPUESTA', evidenceIds: ['e2'] }
+    const api = vi.fn().mockImplementation(async (path: string, options?: RequestInit) => options?.method === 'POST' ? answer : detail)
+    const { container } = render(<ReviewDesk sessions={sessions} selectedId="s1" onSelect={() => {}} api={api} onRefresh={async () => {}} aiReady />)
+    fireEvent.change(await screen.findByLabelText('Pregunta sobre la conversación'), { target: { value: '¿Qué productos mostró el agente?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Preguntar' }))
+    await screen.findByText('Mostró un portátil.')
+    expect(api).toHaveBeenCalledWith('/sessions/s1/assistant', expect.objectContaining({ method: 'POST' }))
+    // Citations drive the same highlighting as a finding's evidence.
+    fireEvent.click(screen.getByRole('button', { name: /1 mensaje citados|1 mensaje citado/ }))
+    await waitFor(() => expect(container.querySelector('[data-message-id="e2"]')?.getAttribute('data-evidence')).toBe('true'))
+  })
   it('records a calibration mark on the conversation, not on the evaluation', async () => {
     const api = vi.fn().mockImplementation(async (path: string, options?: RequestInit) => options?.method === 'POST' ? { id: 'f1' } : detail)
     render(<ReviewDesk sessions={sessions} selectedId="s1" onSelect={() => {}} api={api} onRefresh={async () => {}} />)

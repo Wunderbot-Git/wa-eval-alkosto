@@ -7,6 +7,7 @@ import './review-desk.css'
 // calibration marks it addressed. It deliberately never calls a change good
 // or bad — only a person can, and the buckets say what to look at first.
 const buckets: Record<string, { title: string; hint: string; tone: string }> = {
+  CONTRADICE_HALLAZGO_HUMANO: { title: 'La IA no ve un hallazgo humano', tone: 'danger', hint: 'Alguien escribió un hallazgo a mano sobre un criterio que la evaluación vigente sigue dando por cumplido. Es la señal más precisa que hay: dice exactamente qué se le escapa al modelo, con tus palabras al lado de las suyas.' },
   CONTRADICE_REVISION: { title: 'Contradice una revisión humana', tone: 'danger', hint: 'Alguien ya había revisado el veredicto anterior y el nuevo difiere. Empieza por aquí: o el cambio corrigió un error tuyo, o lo introdujo.' },
   MARCADA_Y_CAMBIO: { title: 'Marcada y con cambio', tone: 'warning', hint: 'Tiene una marca abierta y el veredicto se movió. Comprueba si el cambio resolvió lo que marcaste y cierra la marca.' },
   MARCADA_SIN_CAMBIO: { title: 'Marcada, sin cambio', tone: 'neutral', hint: 'El cambio de rúbrica no afectó a esta conversación. Lo que marcaste sigue sin resolverse.' },
@@ -48,6 +49,11 @@ export default function Calibration({ api, onOpen }: { api: (path: string, optio
             {r.comparison.changes.map((c: Row) => <span key={c.name} className={'outcome-tag ' + (c.to === 'INCUMPLE' ? 'warning' : 'good')}>{criterionNames[c.name] || c.name}: {c.from ? statuses[c.from] || c.from : 'nuevo'} → {statuses[c.to] || c.to}{c.severityTo === 'CRITICAL' ? ' (alta)' : ''}</span>)}
             {!r.comparison.changes.length && <span className="outcome-tag muted">Sin cambios por criterio</span>}
           </p>}
+          {(r.missed || []).map((m: Row) => <div className="calibration-missed" key={m.id}>
+            <small>Hallazgo humano · {criterionNames[m.criterion] || m.criterion}{m.severity === 'CRITICAL' ? ' · gravedad alta' : ''} · escrito con {m.rubricVersion || 'sin versión'}</small>
+            <p>{m.note}</p>
+            <small>La IA ({m.modelVersion}) dice <b>{statuses[m.modelStatus] || 'nada sobre este criterio'}</b>{m.modelReason ? `: ${m.modelReason}` : ''}</small>
+          </div>)}
           {r.flags.map((f: Row) => <div className="calibration-flag" key={f.id}>
             <small>⚑ {kinds[f.kind] || f.kind}{f.payload.criterion ? ` · ${criterionNames[f.payload.criterion]}` : ''} · marcada con {f.payload.rubricVersion || 'sin evaluación'}{f.payload.score == null ? '' : `, nota ${f.payload.score}`}</small>
             <p>{f.payload.note}</p>

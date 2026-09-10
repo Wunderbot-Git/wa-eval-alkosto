@@ -38,10 +38,34 @@ export function rubricComparison(assessments: AssessmentLike[]) {
   }
 }
 
+// Findings a reviewer wrote by hand, from every assessment of the session:
+// a rubric change replaces the assessment, so the older ones are where the
+// earlier ground truth lives.
+export function humanFindings(assessments: AssessmentLike[]) {
+  return assessments.flatMap(a => reviewState(a.payload?.humanReview || []).additions
+    .filter((h: any) => h.kind === 'finding')
+    .map((h: any) => ({ id: h.id, criterion: h.criterion, note: h.note, severity: h.severity, evidenceIds: h.evidenceIds || [], at: h.at, rubricVersion: version(a) })))
+}
+
+// The sharpest calibration signal there is, and it costs the reviewer no
+// extra work: a person wrote a finding on a criterion, and the newest
+// evaluation still reports that criterion as fine. Flags say "look again";
+// this says exactly what the model is still missing, in the reviewer's own
+// words, next to the reason the model gave instead.
+export function humanContradictions(assessments: AssessmentLike[]) {
+  const current = [...assessments].sort((a, b) => time(b) - time(a))[0]
+  if (!current) return []
+  const byName = new Map(criteriaOf(current).map(c => [c.name, c]))
+  return humanFindings(assessments)
+    .filter(h => byName.get(h.criterion)?.status !== 'INCUMPLE')
+    .map(h => ({ ...h, modelStatus: byName.get(h.criterion)?.status ?? null, modelReason: byName.get(h.criterion)?.reason ?? null, modelVersion: version(current) }))
+}
+
 // One row per conversation that either carries a calibration flag or changed
 // between rubric versions. Buckets are ordered by how much they deserve a
 // second look, never by whether the change looks like an improvement: only a
 // person can say that, and saying it here would fake ground truth.
+//   CONTRADICE_HALLAZGO_HUMANO  a reviewer's own finding the model still misses
 //   CONTRADICE_REVISION  a person had reviewed the old verdict, the new one differs
 //   MARCADA_Y_CAMBIO     an open flag, and the verdict moved since
 //   MARCADA_SIN_CAMBIO   an open flag the change did not affect
@@ -52,13 +76,15 @@ export function calibrationRows(sessions: any[], assessments: AssessmentLike[] &
     const comparison = rubricComparison(own)
     const open = flags.filter(f => f.sessionId === session.id && !f.payload?.resolved)
     const moved = !!comparison && (comparison.changes.length > 0 || comparison.scoreFrom !== comparison.scoreTo)
-    const bucket = comparison?.reviewedBefore && moved ? 'CONTRADICE_REVISION'
+    const missed = humanContradictions(own)
+    const bucket = missed.length ? 'CONTRADICE_HALLAZGO_HUMANO'
+      : comparison?.reviewedBefore && moved ? 'CONTRADICE_REVISION'
       : open.length && moved ? 'MARCADA_Y_CAMBIO'
       : open.length ? 'MARCADA_SIN_CAMBIO'
       : moved ? 'CAMBIO' : null
-    return bucket ? { sessionId: session.id, subject: session.subject, start: session.start, outcome: session.outcome, bucket, comparison, flags: open } : null
+    return bucket ? { sessionId: session.id, subject: session.subject, start: session.start, outcome: session.outcome, bucket, comparison, flags: open, missed } : null
   }).filter(Boolean) as any[]
-  const order = ['CONTRADICE_REVISION', 'MARCADA_Y_CAMBIO', 'MARCADA_SIN_CAMBIO', 'CAMBIO']
+  const order = ['CONTRADICE_HALLAZGO_HUMANO', 'CONTRADICE_REVISION', 'MARCADA_Y_CAMBIO', 'MARCADA_SIN_CAMBIO', 'CAMBIO']
   return rows.sort((a, b) => order.indexOf(a.bucket) - order.indexOf(b.bucket) || b.start.localeCompare(a.start))
 }
 

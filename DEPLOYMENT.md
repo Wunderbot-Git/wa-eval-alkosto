@@ -186,6 +186,25 @@ In the workspace, the "Sin evaluar" section of Revisión shows how many of the
 pending conversations qualify and can start a batch of up to 50 on demand; it
 runs in the background and the queue reports its progress.
 
+### Review assistant
+
+The review panel carries a small assistant that answers questions about the
+conversation being reviewed: what was said, by whom, in what order, whether a
+question went unanswered. Its citations drive the same transcript highlighting
+as a finding's evidence, and citations that do not point at a message of this
+conversation are dropped rather than shown.
+
+It deliberately does not judge, and it is never shown the model's verdict.
+The human verdict is the ground truth the whole rubric calibrates against; an
+assistant that offered an opinion, or that could read what the evaluator
+decided, would turn that ground truth into an echo of the model. Questions
+asking for a judgement come back as "fuera de alcance". Each exchange is
+appended to the assessment as provenance, so a hand-written finding produced
+after consulting the assistant is recorded as such.
+
+It uses the same Gemini configuration as the evaluation, one short call per
+question against the transcript alone.
+
 ### Calibration (pilot phase)
 
 The `Calibración` tab exists to tune the rubric against real conversations and
@@ -202,6 +221,13 @@ newest verdict against the newest one produced under a *different*
 
 Conversations are grouped by how much they deserve a second look, never by
 whether a change looks like an improvement — only a person can judge that:
+
+- **La IA no ve un hallazgo humano** — somebody wrote a finding by hand on a
+  criterion the current evaluation still reports as fine. This is the sharpest
+  signal available and it costs the reviewer no extra work, since adding
+  findings is part of normal review: it names exactly what the model misses,
+  in the reviewer's words, next to the reason the model gave instead. Findings
+  written under an older rubric keep counting until the model agrees.
 
 - **Contradice una revisión humana** — somebody had already reviewed the older
   verdict and the new one differs. Either the change corrected their error or
