@@ -96,6 +96,16 @@ describe('review desk evidence workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: '✕ Cerrar' }))
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+  it('records a calibration mark on the conversation, not on the evaluation', async () => {
+    const api = vi.fn().mockImplementation(async (path: string, options?: RequestInit) => options?.method === 'POST' ? { id: 'f1' } : detail)
+    render(<ReviewDesk sessions={sessions} selectedId="s1" onSelect={() => {}} api={api} onRefresh={async () => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Marcar para calibración/ }))
+    fireEvent.change(screen.getByLabelText('Qué debería haber detectado'), { target: { value: 'Descartó iPhone sin confirmar' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar marca' }))
+    // The mark hangs off the session id so it survives a re-evaluation.
+    await waitFor(() => expect(api).toHaveBeenCalledWith('/sessions/s1/flags', expect.objectContaining({ method: 'POST', body: expect.stringContaining('"kind":"FALTA_HALLAZGO"') })))
+    expect(api.mock.calls.some(([path]) => path.includes('/assessments/'))).toBe(false)
+  })
   it('only advances after the completion request succeeds', async () => {
     const completedFinding = { ...detail, assessments: [{ ...detail.assessments[0], payload: { ...detail.assessments[0].payload, humanReview: [{ id: 'r', action: 'decision', criterion: 'adecuacion', decision: 'confirm', at: '2026-09-08T10:00:00Z', userId: 'u' }] } }] }
     const api = vi.fn().mockImplementation(async (_path, options) => { if (options?.method === 'POST') throw new Error('No se pudo guardar'); return completedFinding })

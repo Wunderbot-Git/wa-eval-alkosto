@@ -16,6 +16,7 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
   const [open, setOpen] = useState(!!selectedId)
   const [filter, setFilter] = useState('all')
   const [expanded, setExpanded] = useState<string[]>([])
+  const [flagging, setFlagging] = useState(false)
   const [detail, setDetail] = useState<Row | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -113,9 +114,25 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
       <button className="desk-overlay-close" onClick={() => setOpen(false)}>✕ Cerrar</button>
       <span className="desk-overlay-pos">{position < 0 ? 0 : position + 1} de {queue.length}</span>
       <div className="desk-paging"><button aria-label="Conversación anterior" disabled={busy || position <= 0} onClick={() => onSelect(queue[position - 1].id)}>←</button><button aria-label="Conversación siguiente" disabled={busy || position < 0 || position >= queue.length - 1} onClick={() => onSelect(queue[position + 1].id)}>→</button></div>
+      <button className="desk-flag-open" disabled={busy} aria-pressed={flagging} onClick={() => setFlagging(v => !v)}>⚑ Marcar para calibración</button>
       {notice && <p className="desk-saved" role="status">{notice}</p>}
       {error && <div className="desk-error" role="alert">{error} <button disabled={busy} onClick={() => setRevision(n => n + 1)}>Actualizar conversación</button></div>}
     </div>
+    {flagging && <form className="desk-flag" onSubmit={async e => {
+      e.preventDefault()
+      const f = Object.fromEntries(new FormData(e.currentTarget))
+      setBusy(true); setError(''); setNotice('')
+      try {
+        await api(`/sessions/${activeId}/flags`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f) })
+        setFlagging(false); setNotice('Marcada. Aparecerá en Calibración hasta que la revises tras el próximo cambio de rúbrica.')
+      } catch (err) { setError((err as Error).message) } finally { setBusy(false) }
+    }}>
+      <p>Qué falló en esta evaluación. La marca queda en la conversación y sobrevive a la reevaluación, para comprobar después si el cambio de rúbrica la resolvió.</p>
+      <label>Tipo<select name="kind" defaultValue="FALTA_HALLAZGO"><option value="FALTA_HALLAZGO">Faltó un hallazgo</option><option value="HALLAZGO_FALSO">Hallazgo inventado</option><option value="SEVERIDAD_INCORRECTA">Severidad incorrecta</option><option value="CASO_DE_REFERENCIA">Caso de referencia (debe seguir igual)</option></select></label>
+      <label>Criterio (opcional)<select name="criterion" defaultValue=""><option value="">Sin criterio concreto</option>{Object.entries(criterionNames).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+      <label>Qué debería haber detectado<textarea name="note" required maxLength={4000} placeholder="p. ej. el agente descartó «iPhone» a partir de «no quiero aifon» sin confirmar" /></label>
+      <button disabled={busy}>Guardar marca</button><button type="button" disabled={busy} onClick={() => setFlagging(false)}>Cancelar</button>
+    </form>}
     {!activeId ? <p className="empty">No hay conversaciones en esta cola.</p> : !detail ? <p className="empty" role="status">Cargando conversación y evaluación…</p> : <>
     <div className="desk-mobile-tabs"><button aria-pressed={mobile === 'findings'} onClick={() => setMobile('findings')}>Evaluación y hallazgos</button><button aria-pressed={mobile === 'chat'} onClick={() => setMobile('chat')}>Conversación</button></div>
     <div className={'desk-panels mobile-' + mobile}>

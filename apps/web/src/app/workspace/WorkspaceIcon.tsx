@@ -6,6 +6,7 @@ const paths: Record<string, string> = {
   catálogos: 'M4 4h6l2 2 2-2h6v16h-6l-2 2-2-2H4Z M12 6v16',
   mejoras: 'M4 20h16 M6 16l4-5 4 2 5-8 M14 5h5v5',
   pruebas: 'M8 3h8 M10 3v6l-6 10a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V3 M8 14h8',
+  calibración: 'M4 6h16 M4 12h16 M4 18h16 M9 3v6 M15 9v6 M7 15v6',
   checked: 'M9 12l2 2 4-4 M12 3l8 3v6c0 4-4 7-8 9-4-2-8-5-8-9V6Z',
   alert: 'M12 3 2 21h20L12 3Z M12 9v5 M12 17v1',
   clock: 'M12 8v5l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',

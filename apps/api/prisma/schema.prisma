@@ -24,6 +24,19 @@ model ReviewAssessment {
   @@index([sessionId, createdAt])
 }
 
+// Calibration marks from the pilot phase. Attached to the conversation, not
+// to an assessment: a rubric change replaces the assessment, and the whole
+// point of a mark is to survive that and be checked against the new verdict.
+model ReviewFlag {
+  id String @id @default(uuid())
+  sessionId String
+  kind String
+  payload Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([sessionId])
+}
+
 model ReviewCatalog {
   id String @id
   source String

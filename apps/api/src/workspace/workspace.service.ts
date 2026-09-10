@@ -5,6 +5,7 @@ import { evaluationCandidacy, Event, hash, parseEvents, redact, sessionsFromEven
 import { GoogleGenAI } from '@google/genai'
 import { resolveGeminiMode } from '../judges/gemini/gemini-client.service'
 import { cloudRequest, queryMessages } from './google-cloud'
+import { calibrationRows, FLAG_KINDS } from './calibration'
 
 export const RUBRIC_VERSION = 'pilot-4'
 
@@ -255,6 +256,50 @@ export class WorkspaceService {
     if (!ids.length) throw new BadRequestException('No hay conversaciones aptas pendientes de evaluación')
     void this.evaluateBatch(ids).catch(() => { if (this.batch) { this.batch.running = false; this.batch.finishedAt = new Date().toISOString() } })
     return { started: ids.length }
+  }
+  // Calibration marks: a reviewer records what the model got wrong so the
+  // case can be checked again after the rubric changes. The verdict at the
+  // time of marking is stored with it — otherwise there is nothing to
+  // compare the later evaluation against.
+  async flagSession(sessionId: string, body: any, userId: string) {
+    const session = await this.detail(sessionId)
+    if (!FLAG_KINDS.includes(body.kind)) throw new BadRequestException('Tipo de marca inválido')
+    const note = typeof body.note === 'string' ? body.note.trim() : ''
+    if (!note || note.length > 4000) throw new BadRequestException('Describe qué debería haber detectado la evaluación')
+    if (body.criterion && !CRITERIA.includes(body.criterion)) throw new BadRequestException('Criterio inválido')
+    const verdict = (session.assessments[0]?.payload as any)?.verdict
+    return this.db.reviewFlag.create({ data: { sessionId, kind: body.kind, payload: {
+      note: redact(note), criterion: body.criterion || null, userId, at: new Date().toISOString(),
+      rubricVersion: (session.assessments[0]?.payload as any)?.rubricVersion ?? null,
+      score: verdict?.score ?? null, label: verdict?.label ?? null, resolved: null,
+    } as any } })
+  }
+  async resolveFlag(id: string, body: any, userId: string) {
+    const flag = await this.db.reviewFlag.findUnique({ where: { id } })
+    if (!flag) throw new NotFoundException()
+    const payload = flag.payload as any
+    if (body.reopen) return this.db.reviewFlag.update({ where: { id }, data: { payload: { ...payload, resolved: null } } })
+    const note = typeof body.note === 'string' ? body.note.trim() : ''
+    if (note.length > 4000) throw new BadRequestException('Comentario demasiado largo')
+    const session = await this.detail(flag.sessionId)
+    return this.db.reviewFlag.update({ where: { id }, data: { payload: { ...payload, resolved: {
+      at: new Date().toISOString(), userId, note: redact(note),
+      rubricVersion: (session.assessments[0]?.payload as any)?.rubricVersion ?? null,
+    } } } })
+  }
+  // What a rubric change did to the verdicts, plus the open marks it did or
+  // did not address. Read-only: it never decides whether a change was an
+  // improvement, only which conversations deserve a second look.
+  async calibration() {
+    const [sessions, assessments, flags] = await Promise.all([
+      this.sessions(),
+      this.db.reviewAssessment.findMany({ orderBy: { createdAt: 'desc' } }),
+      this.db.reviewFlag.findMany({ orderBy: { createdAt: 'desc' } }),
+    ])
+    const rows = calibrationRows(sessions, assessments as any, flags as any)
+    const versions = [...new Set(assessments.map(a => (a.payload as any)?.rubricVersion).filter(Boolean))]
+    return { rows, versions, current: RUBRIC_VERSION,
+      open: flags.filter(f => !(f.payload as any)?.resolved).length, total: flags.length }
   }
   async guidedReview(id: string, body: any, userId: string) {
     const a = await this.db.reviewAssessment.findUnique({ where: { id } })
