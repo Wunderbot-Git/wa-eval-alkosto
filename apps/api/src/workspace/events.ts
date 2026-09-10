@@ -135,6 +135,33 @@ export function parseEvents(text: string, secret: string, stats = { conflicts: 0
   return [...unique.values()]
 }
 
+// Which conversations are worth an automatic evaluation. Two model calls
+// per conversation cost real money, and a greeting answered by a template
+// produces "EVIDENCIA_INSUFICIENTE" on every criterion — an expensive way
+// to learn nothing. Four independent reasons to skip one:
+//   SIN_DIALOGO           the customer never wrote after the agent's first
+//                         message: there is no exchange to judge
+//   BORDE_DE_DATOS        the conversation may continue past the import
+//                         cutoff; evaluate() refuses it anyway
+//   CONVERSACION_CORTA    fewer than `messages` customer/agent turns —
+//                         closure, survey, reset and trace events do not
+//                         count, so template noise cannot inflate this
+//   SIN_APORTE_DEL_CLIENTE fewer than `customerTurns` customer messages —
+//                         in practice an agent-initiated flow the customer
+//                         only acknowledged; nothing was asked, understood
+//                         or compared (a customer opener with no reply is
+//                         already SIN_DIALOGO)
+// Manual evaluation of a single conversation stays available for all of them.
+export type Candidacy = { eligible: boolean; reason: 'APTA' | 'SIN_DIALOGO' | 'BORDE_DE_DATOS' | 'CONVERSACION_CORTA' | 'SIN_APORTE_DEL_CLIENTE' }
+export function evaluationCandidacy(session: ReviewSession, limits = { messages: 4, customerTurns: 2 }): Candidacy {
+  if (session.outcome === 'SIN_INTERACCION') return { eligible: false, reason: 'SIN_DIALOGO' }
+  if (session.reconstruction?.endReason === 'BORDE_DE_DATOS') return { eligible: false, reason: 'BORDE_DE_DATOS' }
+  const commercial = session.events.filter(e => e.kind === 'customer' || e.kind === 'agent')
+  if (commercial.length < limits.messages) return { eligible: false, reason: 'CONVERSACION_CORTA' }
+  if (commercial.filter(e => e.kind === 'customer').length < limits.customerTurns) return { eligible: false, reason: 'SIN_APORTE_DEL_CLIENTE' }
+  return { eligible: true, reason: 'APTA' }
+}
+
 export function sessionsFromEvents(events: Event[]): ReviewSession[] {
   const groups = new Map<string, Event[]>()
   for (const e of events) groups.set(e.subject, [...(groups.get(e.subject) || []), e])

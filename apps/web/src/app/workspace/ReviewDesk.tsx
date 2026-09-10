@@ -7,7 +7,7 @@ const statuses: Record<string, string> = { INCUMPLE: 'Hallazgo', CUMPLE: 'Cumple
 const timestamp = (v: string) => new Date(v).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })
 const shortDate = (v: string) => new Date(v).toLocaleString('es-CO', { timeZone: 'America/Bogota', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 const day = (v: string) => new Date(v).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'long', year: 'numeric' })
-export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefresh, aiReady }: { sessions: Row[]; selectedId: string; onSelect: (id: string) => void; api: (path: string, options?: RequestInit) => Promise<any>; onRefresh: () => Promise<void>; aiReady?: boolean }) {
+export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefresh, aiReady, batch }: { sessions: Row[]; selectedId: string; onSelect: (id: string) => void; api: (path: string, options?: RequestInit) => Promise<any>; onRefresh: () => Promise<void>; aiReady?: boolean; batch?: Row | null }) {
   const [humanEvidence, setHumanEvidence] = useState<string[]>([])
   const [selectedMessages, setSelectedMessages] = useState<string[]>([])
   const [selecting, setSelecting] = useState(false)
@@ -80,14 +80,28 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
       setNote(''); setDecision(''); setExpected(''); setImprovement(false)
     } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
   }
+  // Conversations the daily job would evaluate: enough dialogue to judge.
+  const candidates = sessions.filter(s => s.candidacy === 'APTA' && (!s.assessment || s.assessment.stale))
+  const running = !!batch?.running
+  async function evaluatePending() {
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const r = await api('/evaluate/pending', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit: 50 }) })
+      await onRefresh()
+      setNotice(`Evaluando ${r.started} conversaciones en segundo plano. Tarda varios minutos; puedes seguir revisando.`)
+    } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
+  }
   return <div className="review-desk">
     {!open ? <>
-    <div className="desk-queue"><label>Cola de revisión<select value={filter} disabled={busy} onChange={e => setFilter(e.target.value)}><option value="all">Todas las conversaciones con diálogo</option><option value="findings">Con hallazgos</option><option value="review">Pendientes de revisión humana</option><option value="trivial">Sin diálogo (solo saludo)</option></select></label><span className="desk-count">{queue.length} conversaciones · haz clic en una tarjeta para revisarla</span></div>
+    <div className="desk-queue"><label>Cola de revisión<select value={filter} disabled={busy} onChange={e => setFilter(e.target.value)}><option value="all">Todas las conversaciones con diálogo</option><option value="findings">Con hallazgos</option><option value="review">Pendientes de revisión humana</option><option value="trivial">Sin diálogo (solo saludo)</option></select></label><span className="desk-count">{batch ? `${batch.done + batch.failed} de ${batch.total} evaluadas${batch.running ? '…' : batch.failed ? ` · ${batch.failed} fallidas` : ' · lote terminado'} · ` : ''}{queue.length} conversaciones · haz clic en una tarjeta para revisarla</span></div>
     {error && <div className="desk-error" role="alert">{error} <button disabled={busy} onClick={() => setRevision(n => n + 1)}>Actualizar conversación</button></div>}
     {notice && <p className="desk-saved" role="status">{notice}</p>}
     {!queue.length ? <p className="empty">No hay conversaciones en esta cola. Cambia el filtro.</p> :
     sectionsOf(queue).map(section => { const limit = expanded.includes(section.id) ? section.rows.length : 48; return <section key={section.id} className="desk-section">
       <h3 className={'desk-section-head ' + section.tone}><span>{section.title}</span><b>{section.rows.length}</b><small>{section.hint}</small></h3>
+      {section.id === 'pending' && <p className="desk-batch">{candidates.length
+        ? <>{candidates.length} de estas {section.rows.length} tienen diálogo suficiente para evaluarse; el resto se queda sin evaluar a propósito. <button disabled={busy || !aiReady || running} onClick={evaluatePending}>Evaluar {Math.min(candidates.length, 50)} con IA ahora</button></>
+        : 'Ninguna tiene todavía diálogo suficiente para una evaluación con IA.'}</p>}
       <div className="desk-cards">{section.rows.slice(0, limit).map(s => { const a = s.assessment && !s.assessment.stale ? s.assessment : null; return <button key={s.id} className="desk-card" onClick={() => { onSelect(s.id); setOpen(true) }}>
         <span className="desk-card-top"><small>{shortDate(s.start)}{s.count ? ` · ${s.count} mensajes` : ''}</small><b>{a ? `${a.score ?? '—'}/10` : ''}</b></span>
         <span className="desk-card-chips">{cardChips(s).map(c => <span key={c.label} className={`outcome-tag ${c.tone}`}>{c.label}</span>)}</span>

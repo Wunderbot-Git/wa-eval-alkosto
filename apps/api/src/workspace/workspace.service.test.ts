@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { WorkspaceService, previousDayWindow } from './workspace.service'
+import { RUBRIC_VERSION, WorkspaceService, previousDayWindow } from './workspace.service'
 import { hash } from './events'
 
 describe('previousDayWindow', () => {
@@ -75,6 +75,37 @@ describe('review workflow invariants', () => {
       reviewAssessment: { findMany: async () => [] },
     }
     await expect(new WorkspaceService(db as any).evaluate(session.id)).rejects.toThrow('podría continuar')
+  })
+  it('queues only unevaluated candidates and reports batch progress', async () => {
+    process.env.PSEUDONYM_SECRET = 'test-secret'
+    const { parseEvents } = await import('./events')
+    const header = 'user_id;is_user_message;event_timestamp;message_id;message_text;message_type'
+    const talk = (user: string, hour: string) => [0, 1, 2, 3].map(i => `${user};${i % 2 === 0};2026-08-31 ${hour}:0${i}:00 UTC;${user}${i};texto;TEXT`)
+    const events = parseEvents([header,
+      ...talk('rich', '12'), ...talk('other', '13'),
+      'thin;true;2026-08-31 14:00:00 UTC;t1;texto;TEXT', 'thin;false;2026-08-31 14:01:00 UTC;t2;texto;TEXT',
+      ...talk('edge', '23'),
+    ].join('\n'), 'test-secret')
+    const reviewEvent = { findMany: async () => events.map(e => ({ payload: e })) }
+    const build = (assessments: any[]) => new WorkspaceService({ reviewEvent, reviewAssessment: { findMany: async () => assessments } } as any)
+    const all = await build([]).sessions()
+    const of = (id: string) => all.find(s => s.events.some(e => e.id === id))!
+    // Newest first, so a capped run covers the most recent conversations.
+    // The two-message exchange and the one ending at the data cutoff never
+    // enter the queue.
+    expect(await build([]).pendingCandidates(10)).toEqual([of(events[4].id).id, of(events[0].id).id])
+    const current = of(events[0].id)
+    expect(await build([{ sessionId: current.id, inputHash: current.inputHash, payload: { rubricVersion: RUBRIC_VERSION } }]).pendingCandidates(10)).toEqual([of(events[4].id).id])
+    // A stale evaluation is queued again; a cap trims the queue.
+    expect(await build([{ sessionId: current.id, inputHash: 'changed', payload: { rubricVersion: RUBRIC_VERSION } }]).pendingCandidates(1)).toHaveLength(1)
+
+    const service = build([])
+    vi.spyOn(service, 'evaluate').mockRejectedValue(new Error('Vertex AI no respondió'))
+    // One failure must not abort the rest of the batch.
+    const result = await service.evaluateBatch(await service.pendingCandidates(10))
+    expect(result).toMatchObject({ running: false, total: 2, done: 0, failed: 2, lastError: 'Vertex AI no respondió' })
+    const empty = new WorkspaceService({ reviewEvent: { findMany: async () => [] }, reviewAssessment: { findMany: async () => [] } } as any)
+    await expect(empty.startPendingEvaluation({})).rejects.toThrow('No hay conversaciones aptas')
   })
   it('does not silently rewrite an existing imported message', async () => {
     process.env.PSEUDONYM_SECRET = 'test-secret'

@@ -146,6 +146,16 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.auto_import_daily ? "true" : "false"
       }
 
+      env {
+        name  = "AUTO_EVALUATE_DAILY"
+        value = var.auto_evaluate_daily ? "true" : "false"
+      }
+
+      env {
+        name  = "AUTO_EVALUATE_LIMIT"
+        value = tostring(var.auto_evaluate_limit)
+      }
+
       dynamic "env" {
         for_each = var.bigquery_project != "" ? [1] : []
         content {

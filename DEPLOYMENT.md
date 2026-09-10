@@ -164,6 +164,28 @@ The workspace UI's "Importar día anterior ahora" button runs the same
 idempotent import on demand, e.g. to backfill a missed day. Costs are capped
 per query by `maximumBytesBilled` (5 GB — a typical day is a few MB).
 
+### Automatic daily evaluation
+
+Right after the import, the same schedule can evaluate the conversations that
+are worth judging. A conversation is skipped when it has no dialogue (the
+customer never answered the agent's first message), when it ends close to the
+import cutoff and might continue the next day, when it has fewer than
+`EVALUATE_MIN_MESSAGES` customer/agent messages (closure, survey, reset and
+trace events do not count, so template noise cannot inflate the total), or
+when the customer contributed fewer than `EVALUATE_MIN_CUSTOMER_TURNS`
+messages. Evaluating a single conversation by hand stays possible for all of
+them.
+
+Enable it with `auto_evaluate_daily = true` (plus `api_min_instances = 1` and
+a working Gemini configuration). `auto_evaluate_limit` caps one run — each
+conversation costs two model calls, so this is the guard against an unusually
+large import turning into an unexpected bill. Locally the same switches are
+`AUTO_EVALUATE_DAILY=true` and `AUTO_EVALUATE_LIMIT` in `apps/api/.env`.
+
+In the workspace, the "Sin evaluar" section of Revisión shows how many of the
+pending conversations qualify and can start a batch of up to 50 on demand; it
+runs in the background and the queue reports its progress.
+
 ## Gemini configuration reference
 
 | `gemini_mode` (tfvars) | Env vars set on `eval-api` | Notes |

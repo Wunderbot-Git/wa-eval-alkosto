@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { csvRows, parseEvents, sessionsFromEvents, Event } from './events'
+import { csvRows, evaluationCandidacy, parseEvents, sessionsFromEvents, Event } from './events'
 import { validateVerdict, CRITERIA } from './workspace.service'
 const event = (id: string, at: string, kind: Event['kind'], text = ''): Event => ({ id, at: `2026-08-31T${at}:00Z`, subject: 'one', kind, text, media: 'TEXT' })
 describe('Yalo event ingestion', () => {
@@ -105,6 +105,33 @@ describe('Yalo event ingestion', () => {
     const events = [event('1', '12:00', 'customer'), event('2', '14:00', 'customer')]
     expect(sessionsFromEvents(events)).toEqual(sessionsFromEvents([...events].reverse()))
     expect(sessionsFromEvents(events)[1].boundary).toBe('INACTIVIDAD_INFERIDA')
+  })
+})
+describe('automatic evaluation candidacy', () => {
+  // Filler pushes the imported data window well past the conversation, so
+  // the data-edge rule does not mask the dialogue rules under test.
+  const filler = [{ ...event('f1', '12:00', 'trace'), subject: 'filler', at: '2026-08-25T12:00:00Z' }, { ...event('f2', '12:00', 'trace'), subject: 'filler', at: '2026-09-05T12:00:00Z' }]
+  const exchange = (kinds: Event['kind'][]) => sessionsFromEvents([...filler, ...kinds.map((kind, i) => event(String(i + 1), `12:0${i}`, kind, 'texto'))]).find(s => s.subject === 'one')!
+  it('skips what two model calls cannot judge and keeps real exchanges', () => {
+    // Greeting answered by the agent, customer never came back.
+    expect(evaluationCandidacy(exchange(['customer', 'agent'])).reason).toBe('SIN_DIALOGO')
+    // Customer engaged, but the exchange is still too short to judge.
+    expect(evaluationCandidacy(exchange(['customer', 'agent', 'customer'])).reason).toBe('CONVERSACION_CORTA')
+    // Agent-initiated flow the customer acknowledged once: long enough, but
+    // nothing was asked, understood or compared.
+    expect(evaluationCandidacy(exchange(['agent', 'customer', 'agent', 'agent'])).reason).toBe('SIN_APORTE_DEL_CLIENTE')
+    const real = exchange(['customer', 'agent', 'customer', 'agent'])
+    expect(evaluationCandidacy(real)).toEqual({ eligible: true, reason: 'APTA' })
+    // Template noise cannot push a thin conversation over the threshold.
+    expect(evaluationCandidacy(exchange(['customer', 'agent', 'customer', 'trace', 'closure', 'survey'])).reason).toBe('CONVERSACION_CORTA')
+  })
+  it('never evaluates a conversation that may continue past the import cutoff', () => {
+    const edge = sessionsFromEvents([event('1', '12:00', 'customer', 'un televisor'), event('2', '12:01', 'agent', '¿marca?'), event('3', '12:02', 'customer', 'Samsung'), event('4', '12:03', 'agent', 'estas opciones')])[0]
+    expect(edge.reconstruction?.endReason).toBe('BORDE_DE_DATOS')
+    expect(evaluationCandidacy(edge).reason).toBe('BORDE_DE_DATOS')
+  })
+  it('honours configured thresholds', () => {
+    expect(evaluationCandidacy(exchange(['customer', 'agent', 'customer']), { messages: 3, customerTurns: 2 }).eligible).toBe(true)
   })
 })
 describe('evaluator validation', () => {
