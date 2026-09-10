@@ -203,6 +203,13 @@ newest verdict against the newest one produced under a *different*
 Conversations are grouped by how much they deserve a second look, never by
 whether a change looks like an improvement — only a person can judge that:
 
+- **La IA no ve un hallazgo humano** — somebody wrote a finding by hand on a
+  criterion the current evaluation still reports as fine. This is the sharpest
+  signal available and it costs the reviewer no extra work, since adding
+  findings is part of normal review: it names exactly what the model misses,
+  in the reviewer's words, next to the reason the model gave instead. Findings
+  written under an older rubric keep counting until the model agrees.
+
 - **Contradice una revisión humana** — somebody had already reviewed the older
   verdict and the new one differs. Either the change corrected their error or
   introduced one; both are worth knowing immediately.
