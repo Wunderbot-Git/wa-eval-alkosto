@@ -30,3 +30,4 @@
 .desk-overlay .desk-evaluation,.desk-overlay .desk-chat{height:calc(100vh - 88px);min-height:0;max-height:none}
 @media(max-width:850px){.desk-overlay .desk-evaluation,.desk-overlay .desk-chat{height:calc(100vh - 140px)}}
 .review-main .desk-evaluate{width:100%;background:#004797;color:#fff;border:0;border-radius:8px;min-height:42px;font-size:14px;margin-bottom:12px}.review-main .desk-evaluate:disabled{opacity:.45}
+.guide-also{display:grid;gap:8px;background:#f6f9fc;border:1px solid #e2e9f1;border-radius:8px;padding:12px}.guide-also>strong{font-size:13px;color:#38546a}.guide-also>small{font-size:11px;color:#8091a5}.guide-also .guide-check{font-size:13px}

@@ -28,6 +28,21 @@ describe('guided review safeguards', () => {
     expect(() => act(done, { action: 'complete' })).toThrow()
     expect(reviewState(act(done, { action: 'complete', readConversation: true }).humanReview).completed).toBe(true)
   })
+  it('applies one decision to several findings but keeps corrections individual', () => {
+    const multi = { rubricVersion: RUBRIC_VERSION, verdict: { criteria: [{ name: 'adecuacion', status: 'INCUMPLE' }, { name: 'resolucion', status: 'INCUMPLE' }, { name: 'comprension', status: 'INCUMPLE' }] } }
+    const p = reviewAction(multi, events, { action: 'decision', criterion: 'adecuacion', decision: 'dismiss', note: 'Mismo problema raíz', alsoCriteria: ['resolucion'] }, 'u1')
+    const s = reviewState(p.humanReview)
+    expect(p.humanReview).toHaveLength(2)
+    expect(s.decisions.adecuacion.decision).toBe('dismiss')
+    expect(s.decisions.resolucion.note).toBe('Mismo problema raíz')
+    expect(s.decisions.comprension).toBeUndefined()
+    // Undo removes only the last of the batch entries.
+    const undone = reviewAction(p, events, { action: 'undo', target: p.humanReview[1].id }, 'u1')
+    expect(reviewState(undone.humanReview).decisions.adecuacion.decision).toBe('dismiss')
+    expect(reviewState(undone.humanReview).decisions.resolucion).toBeUndefined()
+    expect(() => reviewAction(multi, events, { action: 'decision', criterion: 'adecuacion', decision: 'correct', severity: 'WARNING', correctedCriterion: 'adecuacion', note: 'x', alsoCriteria: ['resolucion'] }, 'u1')).toThrow()
+    expect(() => reviewAction(multi, events, { action: 'decision', criterion: 'adecuacion', decision: 'dismiss', note: 'x', alsoCriteria: ['adecuacion'] }, 'u1')).toThrow()
+  })
   it('cannot undo another reviewer or a superseded action', () => {
     const p = act(payload, { action: 'decision', criterion: 'adecuacion', decision: 'confirm' })
     expect(() => reviewAction(p, events, { action: 'undo', target: p.humanReview[0].id }, 'u2')).toThrow()
