@@ -23,7 +23,7 @@ describe('Yalo event ingestion', () => {
     expect(retry).toHaveLength(1)
     expect(retry[0].at).toBe('2026-08-31T12:00:00.000Z')
     // Different content under one id: both survive, the import does not abort.
-    const stats = { conflicts: 0 }
+    const stats = { conflicts: 0, skipped: 0, rawInvalid: 0 }
     const conflicting = parseEvents([header, row('12:00:00', 'hola'), row('12:05:00', 'otro texto')].join('\n'), 'secret', stats)
     expect(conflicting).toHaveLength(2)
     expect(stats.conflicts).toBe(1)
@@ -31,6 +31,29 @@ describe('Yalo event ingestion', () => {
     // Reversed input order yields the same ids, so re-imports deduplicate.
     const reversed = parseEvents([header, row('12:05:00', 'otro texto'), row('12:00:00', 'hola')].join('\n'), 'secret')
     expect(new Set(reversed.map(e => e.id))).toEqual(new Set(conflicting.map(e => e.id)))
+  })
+  it('skips unattributable rows and keeps messages without an id', () => {
+    const header = 'user_id;is_user_message;event_timestamp;message_id;message_text;message_type'
+    const stats = { conflicts: 0, skipped: 0, rawInvalid: 0 }
+    const events = parseEvents([
+      header,
+      ';false;2026-08-31 12:00:00 UTC;m1;sin usuario;TEXT',
+      'u1;;2026-08-31 12:00:00 UTC;m2;sin rol;TEXT',
+      'u1;true;;m3;sin fecha;TEXT',
+      'u1;true;2026-08-31 12:01:00 UTC;;hola sin id;TEXT',
+      'u1;true;2026-08-31 12:01:00 UTC;;hola sin id;TEXT',
+      'u1;false;2026-08-31 12:02:00 UTC;m4;con id;TEXT',
+    ].join('\n'), 'secret', stats)
+    expect(stats.skipped).toBe(3)
+    expect(events.map(e => e.text)).toEqual(['hola sin id', 'con id'])
+    expect(new Set(events.map(e => e.id)).size).toBe(2)
+  })
+  it('keeps the plain text when an interactive payload is unreadable', () => {
+    const header = 'user_id;is_user_message;event_timestamp;message_id;message_text;message_type;message_raw'
+    const stats = { conflicts: 0, skipped: 0, rawInvalid: 0 }
+    const [e] = parseEvents([header, 'u1;false;2026-08-31 12:00:00 UTC;m1;Compra aquí;RAW;"{roto"'].join('\n'), 'secret', stats)
+    expect(stats.rawInvalid).toBe(1)
+    expect(e.text).toBe('Compra aquí')
   })
   it('keeps rating associated with closure and starts a new commercial session', () => {
     const sessions = sessionsFromEvents([event('1', '12:00', 'customer', 'tablet'), event('2', '13:00', 'closure'), event('3', '13:01', 'survey'), event('4', '13:02', 'customer', '10'), event('5', '13:03', 'customer', 'Ahora un celular')])
