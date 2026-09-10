@@ -30,8 +30,13 @@ export default function Workspace() {
   async function api(path = '', options: RequestInit = {}) {
     const response = await fetch('/api/workspace' + path, { credentials: 'include', ...options })
     if (response.status === 401) { window.location.href = '/login'; throw new Error('Inicia sesión') }
-    const value = await response.json()
-    if (!response.ok) throw new Error(Array.isArray(value.message) ? value.message.join(', ') : value.message || 'No se pudo completar la acción')
+    // A 500 arrives as plain text, not JSON. Parsing it blindly replaced the
+    // real cause with "Unexpected token 'I'", so read the body once and fall
+    // back to its text.
+    const body = await response.text()
+    let value: Any = {}
+    try { value = body ? JSON.parse(body) : {} } catch { value = { message: body.trim().slice(0, 300) } }
+    if (!response.ok) throw new Error(Array.isArray(value.message) ? value.message.join(', ') : value.message || `Error ${response.status}: no se pudo completar la acción`)
     return value
   }
   const refresh = async () => setData(await api())

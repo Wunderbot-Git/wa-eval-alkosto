@@ -107,6 +107,37 @@ describe('review workflow invariants', () => {
     const empty = new WorkspaceService({ reviewEvent: { findMany: async () => [] }, reviewAssessment: { findMany: async () => [] } } as any)
     await expect(empty.startPendingEvaluation({})).rejects.toThrow('No hay conversaciones aptas')
   })
+  it('assembles the calibration view and stores a mark with the verdict it questions', async () => {
+    process.env.PSEUDONYM_SECRET = 'test-secret'
+    const { parseEvents } = await import('./events')
+    const header = 'user_id;is_user_message;event_timestamp;message_id;message_text;message_type'
+    const events = parseEvents([header, ...[0, 1, 2, 3].map(i => `u;${i % 2 === 0};2026-08-31 12:0${i}:00 UTC;m${i};texto;TEXT`)].join('\n'), 'test-secret')
+    const criteria = (status: string) => [{ name: 'comprension', status, severity: status === 'INCUMPLE' ? 'WARNING' : null, reason: 'r', evidenceIds: [] }]
+    const create = vi.fn().mockResolvedValue({ id: 'f1' })
+    let session: any
+    const db = {
+      reviewEvent: { findMany: async () => events.map(e => ({ payload: e })) },
+      reviewAssessment: { findMany: async () => [
+        { id: 'new', sessionId: session.id, inputHash: session.inputHash, createdAt: '2026-09-02T10:00:00Z', payload: { rubricVersion: RUBRIC_VERSION, verdict: { criteria: criteria('INCUMPLE'), score: 0, label: 'CON_HALLAZGOS' } } },
+        { id: 'old', sessionId: session.id, inputHash: session.inputHash, createdAt: '2026-09-01T10:00:00Z', payload: { rubricVersion: 'pilot-3', verdict: { criteria: criteria('CUMPLE'), score: 10, label: 'SIN_HALLAZGOS_OBSERVADOS' } } },
+      ] },
+      reviewFlag: { findMany: async () => [], create },
+    }
+    const service = new WorkspaceService(db as any)
+    session = (await service.sessions())[0]
+    const view = await service.calibration()
+    expect(view).toMatchObject({ current: RUBRIC_VERSION, open: 0, total: 0 })
+    expect(view.versions).toEqual([RUBRIC_VERSION, 'pilot-3'])
+    expect(view.rows[0]).toMatchObject({ sessionId: session.id, bucket: 'CAMBIO' })
+    expect(view.rows[0].comparison.changes).toEqual([{ name: 'comprension', from: 'CUMPLE', to: 'INCUMPLE', severityFrom: null, severityTo: 'WARNING' }])
+
+    // The mark keeps the verdict it questions, or there is nothing to compare against later.
+    await service.flagSession(session.id, { kind: 'FALTA_HALLAZGO', note: 'Descartó iPhone sin confirmar', criterion: 'comprension' }, 'u1')
+    expect(create.mock.calls[0][0].data).toMatchObject({ sessionId: session.id, kind: 'FALTA_HALLAZGO' })
+    expect(create.mock.calls[0][0].data.payload).toMatchObject({ rubricVersion: RUBRIC_VERSION, score: 0, label: 'CON_HALLAZGOS', criterion: 'comprension', resolved: null })
+    await expect(service.flagSession(session.id, { kind: 'INVENTADO', note: 'x' }, 'u1')).rejects.toThrow('Tipo de marca inválido')
+    await expect(service.flagSession(session.id, { kind: 'FALTA_HALLAZGO', note: '  ' }, 'u1')).rejects.toThrow('Describe qué')
+  })
   it('does not silently rewrite an existing imported message', async () => {
     process.env.PSEUDONYM_SECRET = 'test-secret'
     const csv = 'user_id;is_user_message;event_timestamp;message_id;message_text;message_type\nu1;true;2026-08-31T00:00:00Z;m1;Hola;TEXT'
