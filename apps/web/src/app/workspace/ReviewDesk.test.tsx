@@ -85,11 +85,11 @@ describe('review desk evidence workflow', () => {
     render(<ReviewDesk sessions={sessions} selectedId="" onSelect={() => {}} api={api} onRefresh={async () => {}} />)
     // Grid first: no review content until a card is opened.
     expect(screen.queryByRole('dialog')).toBeNull()
+    // The verdict is the section heading; cards carry only what varies.
+    expect(screen.getByRole('heading', { name: /Con hallazgos/ }).textContent).toContain('1')
     const card = await screen.findByRole('button', { name: /Cliente no respondió/ })
-    // Cards triage by status, not by conversation text.
     expect(card.textContent).not.toContain('Hasta un millón')
     expect(card.textContent).toContain('1 hallazgo')
-    expect(card.textContent).toContain('Por revisar')
     fireEvent.click(card)
     await screen.findByRole('dialog')
     await screen.findByRole('button', { name: '✓ Confirmar' })

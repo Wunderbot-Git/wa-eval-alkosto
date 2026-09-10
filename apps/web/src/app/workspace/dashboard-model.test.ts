@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardChips, filterRows, groupOf, reviewOf } from './dashboard-model'
+import { cardChips, filterRows, groupOf, reviewOf, sectionsOf } from './dashboard-model'
 const row = (criteria: any[], extra = {}) => ({ start: '2026-09-01T03:00:00Z', subject: 'test', assessment: { criteria, ...extra } })
 const pass = { name: 'comunicacion', status: 'CUMPLE' }
 const unknown = { name: 'exactitud', status: 'EVIDENCIA_INSUFICIENTE' }
@@ -31,17 +31,25 @@ describe('commercial dashboard classification', () => {
     expect(filterRows([s], f)).toHaveLength(1)
     expect(filterRows([s], { ...f, from: '2026-09-01', to: '2026-09-01' })).toHaveLength(0)
   })
-  it('summarizes a card in at most three chips and never with conversation text', () => {
+  it('puts only what varies on a card: outcome, findings, category, review progress', () => {
     const critical = { name: 'adecuacion', status: 'INCUMPLE', severity: 'CRITICAL' }
     const warning = { name: 'resolucion', status: 'INCUMPLE', severity: 'WARNING' }
-    const s = { ...row([critical, warning, pass], { categories: ['Televisores'] }), preview: 'Hola, busco un televisor' }
+    const s = { ...row([critical, warning, pass], { categories: ['Televisores'] }), outcome: 'AGENTE_SIN_RESPUESTA', preview: 'Hola, busco un televisor' }
     const chips = cardChips(s)
-    expect(chips.map(c => c.label)).toEqual(['Crítico · 2 hallazgos', 'Televisores', 'Por revisar'])
+    expect(chips.map(c => c.label)).toEqual(['Agente no respondió', '2 hallazgos', 'Televisores'])
+    // The agent abandoning the customer is a failure; colour says so.
     expect(chips[0].tone).toBe('danger')
     expect(chips.some(c => c.label.includes('televisor'))).toBe(false)
-    // Without an evaluation there is nothing to categorize or review yet.
-    expect(cardChips({ start: s.start, subject: 'test' }).map(c => c.label)).toEqual(['Sin evaluar'])
-    expect(cardChips(row([pass])).map(c => c.label)).toEqual(['Sin hallazgos', 'Por revisar'])
+    // The verdict group is the section heading and "Por revisar" is every
+    // card's default, so neither is repeated on the card itself.
+    expect(cardChips({ outcome: 'FINAL_SIN_PREGUNTA' }).map(c => c.label)).toEqual(['Cerrada sin pregunta'])
+    expect(cardChips(row([pass])).map(c => c.label)).toEqual([])
+    expect(cardChips(row([pass], { humanReview: { completed: true } })).map(c => c.label)).toEqual(['Revisada'])
+  })
+  it('groups the queue by verdict in triage order and drops empty groups', () => {
+    const failing = row([{ name: 'adecuacion', status: 'INCUMPLE', severity: 'WARNING' }])
+    const sections = sectionsOf([row([pass]), { start: failing.start, subject: 'x' }, failing])
+    expect(sections.map(g => [g.id, g.rows.length])).toEqual([['findings', 1], ['clear', 1], ['pending', 1]])
   })
   it('combines category, human review and text filters', () => {
     const s = row([pass], { categories: ['Computadores', 'Monitores'], summary: 'Presupuesto', review: { decision: 'EN_DESACUERDO' } })

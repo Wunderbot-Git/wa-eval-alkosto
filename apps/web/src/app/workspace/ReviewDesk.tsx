@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { cardChips, criterionNames, groupOf, groups, outcomeNames, outcomeShort, reconstructionNames, reconstructionNotes, reviewOf, Row } from './dashboard-model'
+import { cardChips, criterionNames, groupOf, groups, outcomeNames, reconstructionNames, reconstructionNotes, reviewOf, Row, sectionsOf } from './dashboard-model'
 import './review-desk.css'
 import GuidedReview, { humanState } from './GuidedReview'
 const statuses: Record<string, string> = { INCUMPLE: 'Hallazgo', CUMPLE: 'Cumple', NO_APLICA: 'No aplica', EVIDENCIA_INSUFICIENTE: 'Evidencia insuficiente' }
@@ -15,6 +15,7 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
   // conversation (e.g. dashboard "Ver evaluación") opens it directly.
   const [open, setOpen] = useState(!!selectedId)
   const [filter, setFilter] = useState('all')
+  const [expanded, setExpanded] = useState<string[]>([])
   const [detail, setDetail] = useState<Row | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -85,11 +86,14 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
     {error && <div className="desk-error" role="alert">{error} <button disabled={busy} onClick={() => setRevision(n => n + 1)}>Actualizar conversación</button></div>}
     {notice && <p className="desk-saved" role="status">{notice}</p>}
     {!queue.length ? <p className="empty">No hay conversaciones en esta cola. Cambia el filtro.</p> :
-    <div className="desk-cards">{queue.map(s => { const a = s.assessment && !s.assessment.stale ? s.assessment : null; return <button key={s.id} className="desk-card" onClick={() => { onSelect(s.id); setOpen(true) }}>
-      <span className="desk-card-top"><small>{shortDate(s.start)}</small><b>{a ? `${a.score ?? '—'}/10` : ''}</b></span>
-      <strong>{s.outcome ? outcomeShort[s.outcome] : 'Conversación'}</strong>
-      <span className="desk-card-chips">{cardChips(s).map(c => <span key={c.label} className={`outcome-tag ${c.tone}`}>{c.label}</span>)}</span>
-    </button> })}</div>}
+    sectionsOf(queue).map(section => { const limit = expanded.includes(section.id) ? section.rows.length : 48; return <section key={section.id} className="desk-section">
+      <h3 className={'desk-section-head ' + section.tone}><span>{section.title}</span><b>{section.rows.length}</b><small>{section.hint}</small></h3>
+      <div className="desk-cards">{section.rows.slice(0, limit).map(s => { const a = s.assessment && !s.assessment.stale ? s.assessment : null; return <button key={s.id} className="desk-card" onClick={() => { onSelect(s.id); setOpen(true) }}>
+        <span className="desk-card-top"><small>{shortDate(s.start)}{s.count ? ` · ${s.count} mensajes` : ''}</small><b>{a ? `${a.score ?? '—'}/10` : ''}</b></span>
+        <span className="desk-card-chips">{cardChips(s).map(c => <span key={c.label} className={`outcome-tag ${c.tone}`}>{c.label}</span>)}</span>
+      </button> })}</div>
+      {section.rows.length > limit && <button className="desk-more" onClick={() => setExpanded(v => [...v, section.id])}>Mostrar las {section.rows.length - limit} restantes</button>}
+    </section> })}
     </> : <div className="desk-overlay" role="dialog" aria-modal="true" aria-label="Revisión de la conversación">
     <div className="desk-overlay-bar">
       <button className="desk-overlay-close" onClick={() => setOpen(false)}>✕ Cerrar</button>
