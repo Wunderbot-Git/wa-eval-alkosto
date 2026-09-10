@@ -77,7 +77,7 @@ export function csvRows(text: string): string[][] {
   return rows.filter(r => r.some(Boolean))
 }
 
-export function parseEvents(text: string, secret: string, stats = { conflicts: 0 }): Event[] {
+export function parseEvents(text: string, secret: string, stats = { conflicts: 0, skipped: 0, rawInvalid: 0 }): Event[] {
   if (!secret) throw new Error('Falta la clave local de seudonimización')
   const [headers, ...rows] = csvRows(text)
   const required = ['user_id', 'is_user_message', 'event_timestamp', 'message_id', 'message_text', 'message_type']
@@ -86,9 +86,12 @@ export function parseEvents(text: string, secret: string, stats = { conflicts: 0
   rows.forEach((cells, index) => {
     if (cells.length !== headers.length) throw new Error(`Fila ${index + 2}: número de columnas incorrecto`)
     const r = Object.fromEntries(headers.map((h, i) => [h, cells[i]]))
-    if (!r.user_id || !r.message_id || !['true', 'false'].includes(r.is_user_message.toLowerCase())) throw new Error(`Fila ${index + 2}: falta usuario, mensaje o rol válido`)
     const date = new Date(r.event_timestamp.replace(' UTC', 'Z').replace(' ', 'T'))
-    if (!Number.isFinite(date.getTime())) throw new Error(`Fila ${index + 2}: fecha inválida`)
+    // The shared view sometimes emits rows with a NULL user, role or
+    // timestamp. Without them the message cannot be attributed or placed on
+    // the timeline, so the row is skipped and counted instead of aborting
+    // the whole import.
+    if (!r.user_id || !['true', 'false'].includes((r.is_user_message || '').toLowerCase()) || !Number.isFinite(date.getTime())) { stats.skipped++; return }
     const subject = createHmac('sha256', secret).update(r.user_id).digest('hex').slice(0, 24)
     let body = r.message_text; let cardsText = ''; const customer = r.is_user_message.toLowerCase() === 'true'
     if (r.message_raw) {
@@ -98,7 +101,7 @@ export function parseEvents(text: string, secret: string, stats = { conflicts: 0
         if (interaction?.type === 'carousel' && Array.isArray(interaction.action?.cards)) cardsText = interaction.action.cards.map((c: any, i: number) => typeof c.body?.text === 'string' ? `Opción ${i + 1}: ${c.body.text}` : '').filter(Boolean).join('\n')
         body = [body, interaction?.body?.text, interaction?.action?.parameters?.display_text,
           typeof url === 'string' ? url : null].filter(Boolean).join('\n')
-      } catch { throw new Error(`Fila ${index + 2}: mensaje interactivo JSON inválido`) }
+      } catch { stats.rawInvalid++ } // keep the plain text; only the interactive payload is unreadable
     }
     const n = normal(body)
     let kind: EventKind = customer ? 'customer' : 'agent'
@@ -106,7 +109,11 @@ export function parseEvents(text: string, secret: string, stats = { conflicts: 0
     else if (!customer && n.includes('que recomiendes este canal') && n.includes('1 al 10')) kind = 'survey'
     else if (n === '!reset' || (!customer && n.includes('ha sido reiniciado'))) kind = 'reset'
     else if (!customer && /^(step |vendidas:|finalizar$|productos step)/.test(n)) kind = 'trace'
-    const event: Event = { id: hash(['yalo', subject, r.message_id]), subject, at: date.toISOString(), kind, text: redact(body), media: r.message_type, ...(cardsText ? { cardsText: redact(cardsText) } : {}) }
+    const text = redact(body)
+    // A missing message_id gets a content-derived id, so the event stays
+    // importable and re-imports of the same row still deduplicate.
+    const id = r.message_id ? hash(['yalo', subject, r.message_id]) : hash(['yalo', subject, 'sin-id', date.toISOString(), text])
+    const event: Event = { id, subject, at: date.toISOString(), kind, text, media: r.message_type, ...(cardsText ? { cardsText: redact(cardsText) } : {}) }
     const previous = unique.get(event.id)
     if (!previous || hash(previous) === hash(event)) { unique.set(event.id, event); return }
     // The shared view occasionally repeats a message_id. An ingestion retry
