@@ -14,12 +14,24 @@ export function reviewAction(payload: any, events: any[], body: any, userId: str
   const text = (value: any, required = false) => { if (typeof value !== 'string' || value.length > 4000 || (required && !value.trim())) return fail('Escribe un comentario válido (máximo 4000 caracteres).'); return redact(value.trim()) }
   const criteria = payload.verdict.criteria
   const entry: any = { id: randomUUID(), action: body.action, userId, at: new Date().toISOString() }
+  let entries: any[] = [entry]
   if (body.action === 'decision') {
     if (!criteria.some((c: any) => c.name === body.criterion) || !['confirm', 'correct', 'dismiss', 'defer'].includes(body.decision)) fail('Decisión o criterio inválido')
     Object.assign(entry, { criterion: body.criterion, decision: body.decision, note: text(body.note || '', body.decision !== 'confirm') })
     if (body.decision === 'correct') {
       if (!criteria.some((c: any) => c.name === body.correctedCriterion) || !['WARNING', 'CRITICAL'].includes(body.severity)) fail('Selecciona criterio y gravedad')
       Object.assign(entry, { correctedCriterion: body.correctedCriterion, severity: body.severity })
+    }
+    // One root cause often fans out into several criteria citing the same
+    // evidence: the same decision may be applied to additional findings in
+    // one call. Separate history entries keep undo and the audit trail
+    // per criterion; corrections stay strictly one criterion at a time.
+    const also: any[] = Array.isArray(body.alsoCriteria) ? body.alsoCriteria : []
+    if (also.length) {
+      if (body.decision === 'correct') fail('Corrige cada hallazgo por separado')
+      const targets = [body.criterion, ...also]
+      if (new Set(targets).size !== targets.length || also.some((name: any) => !criteria.some((c: any) => c.name === name))) fail('Criterios repetidos o inválidos')
+      entries = targets.map((name: any) => ({ ...entry, id: randomUUID(), criterion: name }))
     }
   } else if (body.action === 'add') {
     if (!['finding', 'positive'].includes(body.kind) || !criteria.some((c: any) => c.name === body.criterion)) fail('Tipo o criterio inválido')
@@ -35,5 +47,5 @@ export function reviewAction(payload: any, events: any[], body: any, userId: str
     if (criteria.some((c: any) => c.status === 'INCUMPLE' && !state.decisions[c.name]) || Object.values(state.decisions).some((d: any) => d.decision === 'defer')) fail('Resuelve los hallazgos pendientes antes de finalizar')
     entry.readConversation = true
   } else fail('Acción inválida')
-  return { ...payload, humanReview: [...history, entry] }
+  return { ...payload, humanReview: [...history, ...entries] }
 }

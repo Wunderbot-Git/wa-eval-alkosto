@@ -30,7 +30,10 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
   const apiRef = useRef(api); apiRef.current = api
   const scroll = useRef<HTMLDivElement>(null)
   const bubbles = useRef(new Map<string, HTMLDivElement>())
-  const queue = sessions.filter(s => filter === 'all' || filter === 'findings' && ['critical', 'findings'].includes(groupOf(s)) || filter === 'review' && ['pending', 'in_progress'].includes(reviewOf(s)))
+  // Greeting-only conversations (no dialogue) have nothing to review; they
+  // are hidden from every queue except their own explicit filter.
+  const queue = sessions.filter(s => filter === 'trivial' ? s.outcome === 'SIN_INTERACCION'
+    : s.outcome !== 'SIN_INTERACCION' && (filter === 'all' || filter === 'findings' && ['critical', 'findings'].includes(groupOf(s)) || filter === 'review' && ['pending', 'in_progress'].includes(reviewOf(s))))
     .sort((a, b) => groups.findIndex(g => g.id === groupOf(a)) - groups.findIndex(g => g.id === groupOf(b)) || b.start.localeCompare(a.start))
   const activeId = queue.some(s => s.id === selectedId) ? selectedId : queue[0]?.id || ''
   const position = queue.findIndex(s => s.id === activeId)
@@ -78,7 +81,7 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
   }
   return <div className="review-desk">
     {!open ? <>
-    <div className="desk-queue"><label>Cola de revisión<select value={filter} disabled={busy} onChange={e => setFilter(e.target.value)}><option value="all">Todas las conversaciones</option><option value="findings">Con hallazgos</option><option value="review">Pendientes de revisión humana</option></select></label><span className="desk-count">{queue.length} conversaciones · haz clic en una tarjeta para revisarla</span></div>
+    <div className="desk-queue"><label>Cola de revisión<select value={filter} disabled={busy} onChange={e => setFilter(e.target.value)}><option value="all">Todas las conversaciones con diálogo</option><option value="findings">Con hallazgos</option><option value="review">Pendientes de revisión humana</option><option value="trivial">Sin diálogo (solo saludo)</option></select></label><span className="desk-count">{queue.length} conversaciones · haz clic en una tarjeta para revisarla</span></div>
     {error && <div className="desk-error" role="alert">{error} <button disabled={busy} onClick={() => setRevision(n => n + 1)}>Actualizar conversación</button></div>}
     {notice && <p className="desk-saved" role="status">{notice}</p>}
     {!queue.length ? <p className="empty">No hay conversaciones en esta cola. Cambia el filtro.</p> :
