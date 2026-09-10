@@ -15,6 +15,23 @@ describe('Yalo event ingestion', () => {
     expect(e.text).toContain('/p/123456789012')
     expect(parseEvents(csv + '\n' + csv.split('\n')[1], 'secret')).toHaveLength(1)
   })
+  it('collapses ingestion retries and keeps contradictory ids as separate events', () => {
+    const header = 'user_id;is_user_message;event_timestamp;message_id;message_text;message_type'
+    const row = (ts: string, text: string) => `u1;false;2026-08-31 ${ts} UTC;dup;${text};TEXT`
+    // Identical content seconds apart: one event, earliest timestamp wins.
+    const retry = parseEvents([header, row('12:00:00', 'hola'), row('12:00:02', 'hola')].join('\n'), 'secret')
+    expect(retry).toHaveLength(1)
+    expect(retry[0].at).toBe('2026-08-31T12:00:00.000Z')
+    // Different content under one id: both survive, the import does not abort.
+    const stats = { conflicts: 0 }
+    const conflicting = parseEvents([header, row('12:00:00', 'hola'), row('12:05:00', 'otro texto')].join('\n'), 'secret', stats)
+    expect(conflicting).toHaveLength(2)
+    expect(stats.conflicts).toBe(1)
+    expect(new Set(conflicting.map(e => e.id)).size).toBe(2)
+    // Reversed input order yields the same ids, so re-imports deduplicate.
+    const reversed = parseEvents([header, row('12:05:00', 'otro texto'), row('12:00:00', 'hola')].join('\n'), 'secret')
+    expect(new Set(reversed.map(e => e.id))).toEqual(new Set(conflicting.map(e => e.id)))
+  })
   it('keeps rating associated with closure and starts a new commercial session', () => {
     const sessions = sessionsFromEvents([event('1', '12:00', 'customer', 'tablet'), event('2', '13:00', 'closure'), event('3', '13:01', 'survey'), event('4', '13:02', 'customer', '10'), event('5', '13:03', 'customer', 'Ahora un celular')])
     expect(sessions).toHaveLength(2)

@@ -84,7 +84,8 @@ export class WorkspaceService {
   }
   async importCsv(buffer: Buffer) {
     let events: Event[]
-    try { events = parseEvents(buffer.toString('utf8'), process.env.PSEUDONYM_SECRET || '') }
+    const stats = { conflicts: 0 }
+    try { events = parseEvents(buffer.toString('utf8'), process.env.PSEUDONYM_SECRET || '', stats) }
     catch (e) { throw new BadRequestException((e as Error).message) }
     const result = await this.db.$transaction(async tx => {
       const existing = await tx.reviewEvent.findMany({ where: { id: { in: events.map(e => e.id) } } })
@@ -98,7 +99,7 @@ export class WorkspaceService {
       }
       return tx.reviewEvent.createMany({ data: events.map(e => ({ id: e.id, subject: e.subject, occurredAt: new Date(e.at), payload: e as any })), skipDuplicates: true })
     })
-    return { added: result.count, duplicates: events.length - result.count, sessions: (await this.sessions()).length }
+    return { added: result.count, duplicates: events.length - result.count, conflicts: stats.conflicts, sessions: (await this.sessions()).length }
   }
   async importBigQuery(body: any) {
     try { const result = await queryMessages(body.from, body.to, { maxBytes: 5000000000 }); return { ...await this.importCsv(Buffer.from(result.csv)), jobId: result.jobId, processedBytes: result.processedBytes } }
