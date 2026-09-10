@@ -17,6 +17,10 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
   const [filter, setFilter] = useState('all')
   const [expanded, setExpanded] = useState<string[]>([])
   const [flagging, setFlagging] = useState(false)
+  // Research assistant: questions about the evidence only. Kept per
+  // conversation and cleared with it, like every other review state.
+  const [ask, setAsk] = useState('')
+  const [asked, setAsked] = useState<Row[]>([])
   const [detail, setDetail] = useState<Row | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -41,7 +45,7 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
   const position = queue.findIndex(s => s.id === activeId)
   useEffect(() => {
     let cancelled = false
-    setHumanEvidence([]); setSelectedMessages([]); setSelecting(false); setDetail(null); setError(''); setNotice(''); setCriterion(''); setReference(0); setImprovement(false); setDecision(''); setNote(''); setExpected(''); setMobile('findings')
+    setHumanEvidence([]); setSelectedMessages([]); setSelecting(false); setDetail(null); setError(''); setNotice(''); setCriterion(''); setReference(0); setImprovement(false); setDecision(''); setNote(''); setExpected(''); setMobile('findings'); setAsk(''); setAsked([])
     if (activeId) apiRef.current('/sessions/' + activeId).then(d => { if (!cancelled) setDetail(d) }).catch(e => { if (!cancelled) setError(e.message) })
     return () => { cancelled = true }
   }, [activeId, revision])
@@ -72,6 +76,7 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
     })
     return () => cancelAnimationFrame(frame)
   }, [focusId, criterion, detail, mobile])
+  const showEvidenceIds = (ids: string[]) => { setHumanEvidence(ids); setCriterion(''); setReference(0); setMobile('chat') }
   async function save(path: string, body: Row, success: string) {
     setBusy(true); setError(''); setNotice('')
     try {
@@ -155,6 +160,30 @@ export default function ReviewDesk({ sessions, selectedId, onSelect, api, onRefr
         }} />
         {chosen?.status === 'INCUMPLE' && ['confirm', 'correct'].includes(humanState(assessment.payload.humanReview || []).decisions[chosen.name]?.decision) && !stale && <div className="desk-improvement"><button disabled={busy} onClick={() => setImprovement(v => !v)}>Preparar mejora de este hallazgo</button>{improvement && <form onSubmit={e => { e.preventDefault(); save('/issues', { sessionId: activeId, title: `${criterionNames[chosen.name]} · ${detail.subject.slice(0, 8)}`, expected }, 'Solicitud creada en Mejoras. No se ha enviado ningún correo.') }}><h3>{criterionNames[chosen.name]}</h3><label>Resultado esperado y prueba de aceptación<textarea required value={expected} onChange={e => setExpected(e.target.value)} /></label><button disabled={busy}>Crear solicitud de mejora</button></form>}</div>}
       </>}
+      <div className="desk-assistant">
+        <h3>Consultar la conversación</h3>
+        <p>Busca datos en los mensajes: qué se dijo, quién lo dijo, si una pregunta quedó sin respuesta. No opina sobre la evaluación — esa valoración es tuya y debe seguir siéndolo.</p>
+        {!asked.length && <div className="desk-assistant-hints">{['¿Dónde menciona el cliente su presupuesto?', '¿Qué productos mostró el agente?', '¿Quedó alguna pregunta del cliente sin responder?'].map(q =>
+          <button key={q} type="button" disabled={busy || !aiReady} onClick={() => setAsk(q)}>{q}</button>)}</div>}
+        {asked.map((a, i) => <div className={'desk-answer' + (a.kind === 'FUERA_DE_ALCANCE' ? ' out-of-scope' : '')} key={i}>
+          <small>{a.question}</small>
+          <p>{a.answer}</p>
+          {a.evidenceIds?.length > 0 && <button className="guide-link" onClick={() => showEvidenceIds(a.evidenceIds)}>Ver {a.evidenceIds.length} {a.evidenceIds.length === 1 ? 'mensaje' : 'mensajes'} citados →</button>}
+        </div>)}
+        <form onSubmit={async e => {
+          e.preventDefault()
+          const question = ask.trim(); if (!question) return
+          setBusy(true); setError('')
+          try {
+            const answer = await api(`/sessions/${activeId}/assistant`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) })
+            setAsked(v => [...v, answer]); setAsk('')
+          } catch (err) { setError((err as Error).message) } finally { setBusy(false) }
+        }}>
+          <input aria-label="Pregunta sobre la conversación" value={ask} onChange={e => setAsk(e.target.value)} maxLength={500} placeholder="Pregunta sobre los mensajes…" disabled={busy || !aiReady} />
+          <button disabled={busy || !aiReady || !ask.trim()}>Preguntar</button>
+        </form>
+        {!aiReady && <small>Requiere acceso a la IA configurado.</small>}
+      </div>
       </section>
       <section className="desk-chat" aria-label="Conversación estilo WhatsApp"><div className="wa-header"><div className="wa-avatar">{detail.subject.slice(0, 2).toUpperCase()}</div><div><h2>Cliente · {detail.subject.slice(0, 8)}</h2><p>Cliente a la izquierda · Agente a la derecha{detail.outcome ? ` · ${outcomeNames[detail.outcome]}` : ''}</p></div><span className="wa-readonly">Solo lectura</span></div>
         <div className="wa-evidence-nav" aria-live="polite"><div><strong>{humanEvidence.length ? 'Observación humana' : chosen ? criterionNames[chosen.name] : 'Conversación completa'}</strong><span>{chosen || humanEvidence.length ? references.length ? `Evidencia ${reference + 1} de ${references.length} · Mensajes citados resaltados` : 'Este criterio no cita mensajes disponibles.' : 'Elige un hallazgo a la izquierda para saltar a su evidencia.'}{missing > 0 ? ` ${missing} referencias no disponibles.` : ''}</span></div>{references.length > 0 && <div><button aria-label="Evidencia anterior" disabled={reference === 0} onClick={() => setReference(n => n - 1)}>↑</button><button aria-label="Evidencia siguiente" disabled={reference === references.length - 1} onClick={() => setReference(n => n + 1)}>↓</button><button onClick={() => { setHumanEvidence([]); setCriterion(''); setReference(0) }}>Quitar resaltado</button></div>}</div>

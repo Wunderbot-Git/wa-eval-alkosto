@@ -186,6 +186,25 @@ In the workspace, the "Sin evaluar" section of Revisión shows how many of the
 pending conversations qualify and can start a batch of up to 50 on demand; it
 runs in the background and the queue reports its progress.
 
+### Review assistant
+
+The review panel carries a small assistant that answers questions about the
+conversation being reviewed: what was said, by whom, in what order, whether a
+question went unanswered. Its citations drive the same transcript highlighting
+as a finding's evidence, and citations that do not point at a message of this
+conversation are dropped rather than shown.
+
+It deliberately does not judge, and it is never shown the model's verdict.
+The human verdict is the ground truth the whole rubric calibrates against; an
+assistant that offered an opinion, or that could read what the evaluator
+decided, would turn that ground truth into an echo of the model. Questions
+asking for a judgement come back as "fuera de alcance". Each exchange is
+appended to the assessment as provenance, so a hand-written finding produced
+after consulting the assistant is recorded as such.
+
+It uses the same Gemini configuration as the evaluation, one short call per
+question against the transcript alone.
+
 ### Calibration (pilot phase)
 
 The `Calibración` tab exists to tune the rubric against real conversations and

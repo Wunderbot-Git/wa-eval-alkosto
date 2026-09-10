@@ -138,6 +138,38 @@ describe('review workflow invariants', () => {
     await expect(service.flagSession(session.id, { kind: 'INVENTADO', note: 'x' }, 'u1')).rejects.toThrow('Tipo de marca inválido')
     await expect(service.flagSession(session.id, { kind: 'FALTA_HALLAZGO', note: '  ' }, 'u1')).rejects.toThrow('Describe qué')
   })
+  it('answers only about the evidence, drops invented citations and keeps the verdict out of reach', async () => {
+    process.env.PSEUDONYM_SECRET = 'test-secret'
+    const { parseEvents } = await import('./events')
+    const header = 'user_id;is_user_message;event_timestamp;message_id;message_text;message_type'
+    const events = parseEvents([header, ...[0, 1, 2, 3].map(i => `u;${i % 2 === 0};2026-08-31 12:0${i}:00 UTC;m${i};texto ${i};TEXT`)].join('\n'), 'test-secret')
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 })
+    const assessment = { id: 'a1', sessionId: 'x', inputHash: 'h', createdAt: new Date(), payload: { rubricVersion: RUBRIC_VERSION, verdict: { criteria: [] } } }
+    const service = new WorkspaceService({
+      reviewEvent: { findMany: async () => events.map(e => ({ payload: e })) },
+      reviewAssessment: { findMany: async () => [assessment], updateMany },
+    } as any)
+    const session = (await service.sessions())[0]
+    const generate = vi.spyOn(service as any, 'generate')
+
+    generate.mockResolvedValue({ value: { kind: 'RESPUESTA', answer: 'El cliente lo dice al inicio.', evidenceIds: ['e1', 'e99'] } })
+    const out = await service.assistant(session.id, { question: '¿Dónde menciona el presupuesto?' }, 'u1')
+    // A citation the transcript does not contain is dropped, never surfaced.
+    expect(out.evidenceIds).toEqual([session.events[0].id])
+    // The assistant is given the messages only — never the model's verdict.
+    const input = generate.mock.calls[0][1] as any
+    expect(Object.keys(input)).toEqual(['question', 'transcript'])
+    expect(JSON.stringify(input)).not.toContain('rubricVersion')
+    // The exchange is recorded on the assessment as provenance for the review.
+    expect((updateMany.mock.calls[0][0].data.payload as any).assistant[0]).toMatchObject({ question: '¿Dónde menciona el presupuesto?', userId: 'u1' })
+
+    generate.mockResolvedValue({ value: { kind: 'FUERA_DE_ALCANCE', answer: 'Solo puedo buscar hechos en los mensajes.', evidenceIds: [] } })
+    expect((await service.assistant(session.id, { question: '¿Estuvo bien el agente?' }, 'u1')).kind).toBe('FUERA_DE_ALCANCE')
+
+    generate.mockResolvedValue({ value: { answer: 'sin tipo', evidenceIds: [] } })
+    await expect(service.assistant(session.id, { question: 'x' }, 'u1')).rejects.toThrow('no devolvió una respuesta utilizable')
+    await expect(service.assistant(session.id, { question: '  ' }, 'u1')).rejects.toThrow('hasta 500 caracteres')
+  })
   it('does not silently rewrite an existing imported message', async () => {
     process.env.PSEUDONYM_SECRET = 'test-secret'
     const csv = 'user_id;is_user_message;event_timestamp;message_id;message_text;message_type\nu1;true;2026-08-31T00:00:00Z;m1;Hola;TEXT'
