@@ -77,7 +77,7 @@ export function csvRows(text: string): string[][] {
   return rows.filter(r => r.some(Boolean))
 }
 
-export function parseEvents(text: string, secret: string): Event[] {
+export function parseEvents(text: string, secret: string, stats = { conflicts: 0 }): Event[] {
   if (!secret) throw new Error('Falta la clave local de seudonimización')
   const [headers, ...rows] = csvRows(text)
   const required = ['user_id', 'is_user_message', 'event_timestamp', 'message_id', 'message_text', 'message_type']
@@ -108,8 +108,22 @@ export function parseEvents(text: string, secret: string): Event[] {
     else if (!customer && /^(step |vendidas:|finalizar$|productos step)/.test(n)) kind = 'trace'
     const event: Event = { id: hash(['yalo', subject, r.message_id]), subject, at: date.toISOString(), kind, text: redact(body), media: r.message_type, ...(cardsText ? { cardsText: redact(cardsText) } : {}) }
     const previous = unique.get(event.id)
-    if (previous && hash(previous) !== hash(event)) throw new Error(`Fila ${index + 2}: ID de mensaje con contenido contradictorio`)
-    unique.set(event.id, event)
+    if (!previous || hash(previous) === hash(event)) { unique.set(event.id, event); return }
+    // The shared view occasionally repeats a message_id. An ingestion retry
+    // (identical content, timestamps almost equal) collapses to the earliest
+    // copy; genuinely different content is kept as a separate event under a
+    // content-derived id. The earliest copy keeps the plain id regardless of
+    // input order, so re-imports of overlapping windows stay idempotent.
+    if (hash({ ...previous, at: '' }) === hash({ ...event, at: '' }) && Math.abs(Date.parse(previous.at) - Date.parse(event.at)) <= 300000) {
+      if (event.at < previous.at) unique.set(event.id, event)
+      return
+    }
+    stats.conflicts++
+    const derived = (e: Event): Event => ({ ...e, id: hash(['yalo', e.subject, r.message_id, e.at, e.text]) })
+    const incoming = Date.parse(event.at) < Date.parse(previous.at) || (event.at === previous.at && hash(event) < hash(previous))
+    const moved = derived(incoming ? previous : event)
+    unique.set(moved.id, moved)
+    if (incoming) unique.set(event.id, event)
   })
   return [...unique.values()]
 }
