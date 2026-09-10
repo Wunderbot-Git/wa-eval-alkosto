@@ -77,23 +77,32 @@ export const outcomeShort: Record<string, string> = {
   AGENTE_SIN_RESPUESTA: 'Agente no respondió',
   FINAL_SIN_PREGUNTA: 'Cerrada sin pregunta',
 }
-// What a reviewer needs to triage a card at a glance: the finding load,
-// the product category and the human review state — at most three chips,
-// never the message text.
+// Colour carries meaning, not decoration: the agent leaving a customer
+// hanging is a service failure, a customer dropping out mid-flow is a lost
+// opportunity, a clean close is neither.
+export const outcomeTone: Record<string, string> = {
+  SIN_INTERACCION: 'muted',
+  CLIENTE_SIN_RESPUESTA: 'warning',
+  AGENTE_SIN_RESPUESTA: 'danger',
+  FINAL_SIN_PREGUNTA: 'good',
+}
+// Only what varies between the cards of one section. The verdict group is
+// the section heading, and "Por revisar" is the default state of every
+// card, so neither is repeated here; the message text never appears.
 export function cardChips(s: Row): { label: string; tone: string }[] {
-  const group = groupOf(s)
-  const failures = (s.assessment?.criteria || []).filter((c: Row) => c.status === 'INCUMPLE').length
-  const count = `${failures} ${failures === 1 ? 'hallazgo' : 'hallazgos'}`
-  const verdict = group === 'critical' ? { label: `Crítico · ${count}`, tone: 'danger' }
-    : group === 'findings' ? { label: count, tone: 'warning' }
-    : group === 'incomplete' ? { label: 'Evidencia insuficiente', tone: 'neutral' }
-    : group === 'clear' ? { label: 'Sin hallazgos', tone: 'good' }
-    : group === 'stale' ? { label: 'Reevaluar', tone: 'muted' }
-    : { label: 'Sin evaluar', tone: 'muted' }
-  const chips = [verdict]
-  const category = group === 'pending' || group === 'stale' ? '' : categoriesOf(s)[0]
+  const chips: { label: string; tone: string }[] = []
+  if (s.outcome) chips.push({ label: outcomeShort[s.outcome], tone: outcomeTone[s.outcome] })
+  const criteria: Row[] = s.assessment && !s.assessment.stale ? s.assessment.criteria || [] : []
+  const failures = criteria.filter(c => c.status === 'INCUMPLE')
+  if (failures.length) chips.push({ label: `${failures.length} ${failures.length === 1 ? 'hallazgo' : 'hallazgos'}`, tone: failures.some(c => c.severity === 'CRITICAL') ? 'danger' : 'warning' })
+  const category = criteria.length ? categoriesOf(s)[0] : ''
   if (category && category !== 'Sin categoría evaluada') chips.push({ label: category, tone: 'plain' })
   const review = reviewOf(s)
-  if (review !== 'unavailable') chips.push({ label: reviewNames[review], tone: 'human-status ' + review })
+  if (review !== 'unavailable' && review !== 'pending') chips.push({ label: reviewNames[review], tone: 'human-status ' + review })
   return chips
+}
+// The queue as sections: one per verdict group, in triage order, so the
+// heading carries the state and the cards only carry what differs.
+export function sectionsOf(rows: Row[]) {
+  return groups.map(g => ({ ...g, rows: rows.filter(s => groupOf(s) === g.id) })).filter(g => g.rows.length)
 }
