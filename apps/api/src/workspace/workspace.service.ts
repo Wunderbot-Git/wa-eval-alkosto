@@ -5,7 +5,7 @@ import { evaluationCandidacy, Event, hash, parseEvents, redact, sessionsFromEven
 import { GoogleGenAI } from '@google/genai'
 import { resolveGeminiMode } from '../judges/gemini/gemini-client.service'
 import { cloudRequest, queryMessages } from './google-cloud'
-import { calibrationRows, FLAG_KINDS } from './calibration'
+import { calibrationRows, disagreementSummary, FLAG_KINDS } from './calibration'
 
 export const RUBRIC_VERSION = 'pilot-5'
 
@@ -38,7 +38,7 @@ fricciones: limitaciones del canal o de capacidad que frustran al cliente aunque
 
 // Research aid for the reviewer, deliberately not a second judge. The human
 // verdict is the ground truth this whole system calibrates against (see
-// humanContradictions): an assistant that offered an opinion would make that
+// openDisagreements): an assistant that offered an opinion would make that
 // ground truth an echo of the model. So it answers about the evidence and
 // refuses everything else — and it never sees the model's verdict, or it
 // would simply repeat it.
@@ -313,7 +313,11 @@ export class WorkspaceService {
     ])
     const rows = calibrationRows(sessions, assessments as any, flags as any)
     const versions = [...new Set(assessments.map(a => (a.payload as any)?.rubricVersion).filter(Boolean))]
-    return { rows, versions, current: RUBRIC_VERSION,
+    // One reviewer correcting one finding is an anecdote; the same correction
+    // across a dozen conversations is a rubric defect worth a new rule.
+    const summary = disagreementSummary(rows.map(r => ({ sessionId: r.sessionId, open: r.missed })))
+    const reviewed = new Set(assessments.filter(a => reviewState((a.payload as any)?.humanReview || []).completed).map(a => a.sessionId)).size
+    return { rows, summary, versions, current: RUBRIC_VERSION, reviewed,
       open: flags.filter(f => !(f.payload as any)?.resolved).length, total: flags.length }
   }
   async assistant(sessionId: string, body: any, userId: string) {
