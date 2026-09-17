@@ -222,12 +222,23 @@ newest verdict against the newest one produced under a *different*
 Conversations are grouped by how much they deserve a second look, never by
 whether a change looks like an improvement — only a person can judge that:
 
-- **La IA no ve un hallazgo humano** — somebody wrote a finding by hand on a
-  criterion the current evaluation still reports as fine. This is the sharpest
-  signal available and it costs the reviewer no extra work, since adding
-  findings is part of normal review: it names exactly what the model misses,
-  in the reviewer's words, next to the reason the model gave instead. Findings
-  written under an older rubric keep counting until the model agrees.
+- **La IA contradice a quien revisó** — every review action asserts something
+  about a criterion, and the current verdict asserts the opposite. This is the
+  sharpest signal available and it costs the reviewer no extra work, since the
+  assertions are the ordinary review actions: a confirmed or hand-written
+  finding expects the criterion to stay INCUMPLE, a dismissal expects it not
+  to, a correction expects the criterion and severity the reviewer chose. So
+  it catches a finding the model misses, one it invented, a severity that does
+  not fit, and a confirmed finding that later vanished — a regression. A
+  deferral asserts nothing and is left out. Assertions made under an older
+  rubric keep counting until the model agrees.
+
+Above the list, **Qué corrigen las personas que revisan** groups those
+disagreements by criterion and kind across the whole corpus, with the
+reviewers' notes. One dismissal is an anecdote; the same dismissal twelve
+times is a rubric defect, and only the count tells them apart. That count is
+what a new rubric rule should be written from — and `RUBRIC_VERSION` plus the
+version comparison above is how you then check the rule did what you meant.
 
 - **Contradice una revisión humana** — somebody had already reviewed the older
   verdict and the new one differs. Either the change corrected their error or
