@@ -9,6 +9,8 @@ COPY packages/shared/ ./packages/shared/
 COPY apps/api/ ./apps/api/
 COPY tsconfig.base.json ./
 
+RUN rm -f apps/api/.env apps/api/.env.local
+
 # Install all deps
 RUN pnpm install --frozen-lockfile
 
@@ -26,7 +28,7 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nestjs
 
 # Clean up source files (keep dist, node_modules, prompts, prisma)
-RUN rm -rf packages/shared/src apps/api/src tsconfig.base.json
+RUN rm -rf packages/shared/src tsconfig.base.json
 
 USER nestjs
 WORKDIR /app/apps/api
