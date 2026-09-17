@@ -52,7 +52,7 @@ export async function queryMessages(from: string, to: string, options: { dryRun?
   // is injection-safe. maximumBytesBilled stays the hard cost cap either way.
   const startIso = start.toISOString(); const endIso = end.toISOString()
   const query = {
-    query: `SELECT user_id,is_user_message,FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%E6SZ',event_timestamp,'UTC') AS event_timestamp,message_id,message_text,message_type,message_raw FROM \`yalo-eval-wa.yalo_data_sharing___alkosto_co.vw_messages\` WHERE event_date >= DATE(TIMESTAMP '${startIso}') AND event_date <= DATE(TIMESTAMP '${endIso}') AND event_timestamp >= TIMESTAMP '${startIso}' AND event_timestamp < TIMESTAMP '${endIso}' ORDER BY event_timestamp LIMIT 20001`,
+    query: `SELECT user_id,is_user_message,FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%E6SZ',event_timestamp,'UTC') AS event_timestamp,message_id,message_text,message_type,message_raw FROM \`datos-medios-propios.yalo_data_sharing___alkosto_co.vw_messages\` WHERE event_date >= DATE(TIMESTAMP '${startIso}') AND event_date <= DATE(TIMESTAMP '${endIso}') AND event_timestamp >= TIMESTAMP '${startIso}' AND event_timestamp < TIMESTAMP '${endIso}' ORDER BY event_timestamp LIMIT 20001`,
     useLegacySql: false, maximumBytesBilled: String(maxBytes),
   }
   if (options.dryRun) {
